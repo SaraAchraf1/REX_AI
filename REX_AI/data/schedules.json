@@ -1,0 +1,214 @@
+{
+  "_meta": {
+    "source_id": "SRC-ACAD-SCHEDULES",
+    "status": "sample",
+    "last_updated": "2026-10-17",
+    "formats": {
+      "online_live": "Live online sessions",
+      "onsite": "In person at the academy",
+      "hybrid": "Mix of online and in-person sessions"
+    }
+  },
+  "schedules": [
+    {
+      "schedule_id": "SCH-001",
+      "course_id": "AI-101",
+      "start_date": "2026-11-15",
+      "format": "online_live",
+      "days": "Sun, Tue",
+      "time": "19:00-22:00",
+      "location": null,
+      "seats_left": 12
+    },
+    {
+      "schedule_id": "SCH-002",
+      "course_id": "AI-101",
+      "start_date": "2027-01-10",
+      "format": "hybrid",
+      "days": "Sat",
+      "time": "10:00-16:00",
+      "location": "Alexandria",
+      "seats_left": 20
+    },
+    {
+      "schedule_id": "SCH-003",
+      "course_id": "AI-201",
+      "start_date": "2026-12-01",
+      "format": "online_live",
+      "days": "Mon, Wed",
+      "time": "19:00-22:00",
+      "location": null,
+      "seats_left": 8
+    },
+    {
+      "schedule_id": "SCH-004",
+      "course_id": "DS-101",
+      "start_date": "2026-11-22",
+      "format": "onsite",
+      "days": "Sat, Mon",
+      "time": "18:00-21:00",
+      "location": "Cairo",
+      "seats_left": 15
+    },
+    {
+      "schedule_id": "SCH-005",
+      "course_id": "DS-101",
+      "start_date": "2026-11-29",
+      "format": "online_live",
+      "days": "Sun, Wed",
+      "time": "19:00-22:00",
+      "location": null,
+      "seats_left": 18
+    },
+    {
+      "schedule_id": "SCH-006",
+      "course_id": "SW-101",
+      "start_date": "2026-12-06",
+      "format": "hybrid",
+      "days": "Sat, Sun, Tue",
+      "time": "17:00-21:00",
+      "location": "Alexandria",
+      "seats_left": 10
+    },
+    {
+      "schedule_id": "SCH-007",
+      "course_id": "SW-201",
+      "start_date": "2026-11-18",
+      "format": "online_live",
+      "days": "Mon, Thu",
+      "time": "19:00-22:00",
+      "location": null,
+      "seats_left": 14
+    },
+    {
+      "schedule_id": "SCH-008",
+      "course_id": "CL-101",
+      "start_date": "2026-11-08",
+      "format": "online_live",
+      "days": "Sun, Tue, Thu",
+      "time": "20:00-22:00",
+      "location": null,
+      "seats_left": 25
+    },
+    {
+      "schedule_id": "SCH-009",
+      "course_id": "CL-201",
+      "start_date": "2026-12-13",
+      "format": "online_live",
+      "days": "Sun, Wed",
+      "time": "19:00-22:00",
+      "location": null,
+      "seats_left": 12
+    },
+    {
+      "schedule_id": "SCH-010",
+      "course_id": "CY-101",
+      "start_date": "2026-11-21",
+      "format": "onsite",
+      "days": "Sat",
+      "time": "10:00-17:00",
+      "location": "Cairo",
+      "seats_left": 16
+    },
+    {
+      "schedule_id": "SCH-011",
+      "course_id": "BU-101",
+      "start_date": "2026-11-14",
+      "format": "online_live",
+      "days": "Sat, Tue",
+      "time": "18:00-21:30",
+      "location": null,
+      "seats_left": 20
+    },
+    {
+      "schedule_id": "SCH-012",
+      "course_id": "BU-102",
+      "start_date": "2026-11-28",
+      "format": "onsite",
+      "days": "Sat",
+      "time": "11:00-18:00",
+      "location": "Alexandria",
+      "seats_left": 18
+    },
+    {
+      "schedule_id": "SCH-013",
+      "course_id": "BU-201",
+      "start_date": "2026-12-04",
+      "format": "onsite",
+      "days": "Fri, Sat",
+      "time": "09:00-17:00",
+      "location": "Cairo",
+      "seats_left": 20
+    },
+    {
+      "schedule_id": "SCH-014",
+      "course_id": "PD-101",
+      "start_date": "2026-12-10",
+      "format": "hybrid",
+      "days": "Thu",
+      "time": "16:00-21:00",
+      "location": "Alexandria",
+      "seats_left": 15
+    },
+    {
+      "schedule_id": "SCH-015",
+      "course_id": "AI-301",
+      "start_date": "2026-12-06",
+      "format": "online_live",
+      "days": "Sun, Tue",
+      "time": "19:00-22:00",
+      "location": null,
+      "seats_left": 18
+    },
+    {
+      "schedule_id": "SCH-016",
+      "course_id": "AI-301",
+      "start_date": "2027-01-17",
+      "format": "hybrid",
+      "days": "Sat",
+      "time": "10:00-16:00",
+      "location": "Academy campus",
+      "seats_left": 12
+    },
+    {
+      "schedule_id": "SCH-017",
+      "course_id": "DS-201",
+      "start_date": "2026-11-29",
+      "format": "online_live",
+      "days": "Mon, Wed",
+      "time": "19:00-22:00",
+      "location": null,
+      "seats_left": 20
+    },
+    {
+      "schedule_id": "SCH-018",
+      "course_id": "SW-301",
+      "start_date": "2026-12-13",
+      "format": "hybrid",
+      "days": "Sat, Mon",
+      "time": "18:00-21:00",
+      "location": "Academy campus",
+      "seats_left": 16
+    },
+    {
+      "schedule_id": "SCH-019",
+      "course_id": "CY-201",
+      "start_date": "2027-01-10",
+      "format": "onsite",
+      "days": "Sun, Thu",
+      "time": "17:00-21:00",
+      "location": "Academy campus",
+      "seats_left": 14
+    },
+    {
+      "schedule_id": "SCH-020",
+      "course_id": "BU-301",
+      "start_date": "2026-12-02",
+      "format": "online_live",
+      "days": "Wed",
+      "time": "19:00-22:00",
+      "location": null,
+      "seats_left": 30
+    }
+  ]
+}

@@ -1,0 +1,1100 @@
+{
+  "_meta": {
+    "source_id": "SRC-ACAD-COURSES",
+    "status": "sample",
+    "last_updated": "2026-10-23",
+    "currency": "EGP",
+    "warning": "SAMPLE DATA created by the team for the Sprint 1 prototype. Replace with the academy's approved catalogue; REX must never present sample data as real offers.",
+    "imported_from": [
+      "examples/sample_academy_catalog.pdf"
+    ]
+  },
+  "courses": [
+    {
+      "course_id": "AI-101",
+      "title_en": "Introduction to AI and Machine Learning",
+      "title_ar": "مقدمة في الذكاء الاصطناعي وتعلم الآلة",
+      "department": "AI",
+      "industry": [
+        "Technology",
+        "Finance",
+        "Healthcare"
+      ],
+      "skill_level": "Beginner",
+      "target_audience": "Graduates and career changers with basic computer skills who want to start in AI",
+      "duration_hours": 40,
+      "duration_weeks": 5,
+      "formats": [
+        "online_live",
+        "hybrid"
+      ],
+      "language": [
+        "en",
+        "ar"
+      ],
+      "description_en": "A practical first course in AI: how machine learning works, preparing data, training and evaluating simple models in Python, and using AI responsibly.",
+      "description_ar": "دورة عملية أولى في الذكاء الاصطناعي: كيف يعمل تعلم الآلة، وتجهيز البيانات، وتدريب وتقييم نماذج بسيطة باستخدام بايثون، والاستخدام المسؤول للذكاء الاصطناعي.",
+      "learning_outcomes": [
+        "Explain supervised vs. unsupervised learning with examples",
+        "Clean and explore a dataset with pandas",
+        "Train and evaluate a classification model with scikit-learn",
+        "Identify bias and privacy risks in an AI project"
+      ],
+      "modules": [
+        "Python refresher for data",
+        "Data preparation",
+        "Supervised learning",
+        "Unsupervised learning",
+        "Model evaluation",
+        "Responsible AI",
+        "Mini project"
+      ],
+      "prerequisites": [
+        "Basic computer literacy",
+        "High-school level math"
+      ],
+      "career_opportunities": [
+        "Junior data analyst",
+        "ML intern",
+        "AI-enabled business roles"
+      ],
+      "tags": [
+        "ai",
+        "machine learning",
+        "python",
+        "data science",
+        "beginner"
+      ],
+      "certificate": "Academy certificate of completion",
+      "accreditation_alignment": null,
+      "instructor_ids": [
+        "INS-01"
+      ],
+      "country": [
+        "EG",
+        "SA"
+      ]
+    },
+    {
+      "course_id": "AI-201",
+      "title_en": "Generative AI and LLM Applications",
+      "title_ar": "الذكاء الاصطناعي التوليدي وتطبيقات النماذج اللغوية الكبيرة",
+      "department": "AI",
+      "industry": [
+        "Technology",
+        "Education",
+        "Marketing"
+      ],
+      "skill_level": "Intermediate",
+      "target_audience": "Developers and technical professionals who want to build LLM-powered tools",
+      "duration_hours": 36,
+      "duration_weeks": 6,
+      "formats": [
+        "online_live"
+      ],
+      "language": [
+        "en"
+      ],
+      "description_en": "Build real applications with large language models: prompt engineering, retrieval-augmented generation (RAG), AI agents and evaluation, ending with a deployed capstone.",
+      "description_ar": "بناء تطبيقات حقيقية باستخدام النماذج اللغوية الكبيرة: هندسة الأوامر، والتوليد المعزز بالاسترجاع، ووكلاء الذكاء الاصطناعي، والتقييم، مع مشروع ختامي منشور.",
+      "learning_outcomes": [
+        "Design prompts and structured outputs for business tasks",
+        "Build a RAG pipeline over a document collection",
+        "Implement a tool-using AI agent",
+        "Evaluate LLM output quality and safety"
+      ],
+      "modules": [
+        "LLM fundamentals",
+        "Prompt engineering",
+        "Embeddings and vector search",
+        "RAG",
+        "AI agents and tools",
+        "Evaluation and guardrails",
+        "Capstone"
+      ],
+      "prerequisites": [
+        "Python programming",
+        "Basic REST API knowledge"
+      ],
+      "career_opportunities": [
+        "AI engineer",
+        "LLM application developer",
+        "Automation engineer"
+      ],
+      "tags": [
+        "generative ai",
+        "llm",
+        "rag",
+        "agents",
+        "chatgpt",
+        "python"
+      ],
+      "certificate": "Academy certificate of completion",
+      "accreditation_alignment": null,
+      "instructor_ids": [
+        "INS-01",
+        "INS-02"
+      ],
+      "country": [
+        "EG",
+        "SA"
+      ]
+    },
+    {
+      "course_id": "DS-101",
+      "title_en": "Data Analysis with Python and Power BI",
+      "title_ar": "تحليل البيانات باستخدام بايثون وباور بي آي",
+      "department": "Data",
+      "industry": [
+        "Finance",
+        "Retail",
+        "Telecom",
+        "Government"
+      ],
+      "skill_level": "Beginner",
+      "target_audience": "Business, accounting and engineering graduates who want a data analyst role",
+      "duration_hours": 48,
+      "duration_weeks": 6,
+      "formats": [
+        "online_live",
+        "onsite",
+        "hybrid"
+      ],
+      "language": [
+        "ar",
+        "en"
+      ],
+      "description_en": "From spreadsheets to dashboards: SQL basics, data cleaning and analysis in Python, and interactive Power BI reports built on real business cases.",
+      "description_ar": "من الجداول إلى لوحات المعلومات: أساسيات SQL، وتنظيف البيانات وتحليلها ببايثون، وتقارير باور بي آي تفاعلية مبنية على حالات عمل حقيقية.",
+      "learning_outcomes": [
+        "Query relational data with SQL",
+        "Clean and analyze data with pandas",
+        "Build an interactive Power BI dashboard",
+        "Present data insights to non-technical stakeholders"
+      ],
+      "modules": [
+        "Excel to SQL",
+        "Python and pandas",
+        "Data cleaning",
+        "Exploratory analysis",
+        "Power BI modeling",
+        "DAX basics",
+        "Dashboard capstone"
+      ],
+      "prerequisites": [
+        "Comfortable with Excel"
+      ],
+      "career_opportunities": [
+        "Data analyst",
+        "BI analyst",
+        "Reporting specialist"
+      ],
+      "tags": [
+        "data analysis",
+        "power bi",
+        "sql",
+        "python",
+        "excel",
+        "dashboard"
+      ],
+      "certificate": "Academy certificate of completion",
+      "accreditation_alignment": null,
+      "instructor_ids": [
+        "INS-03"
+      ],
+      "country": [
+        "EG",
+        "SA"
+      ]
+    },
+    {
+      "course_id": "SW-101",
+      "title_en": "Full-Stack Web Development",
+      "title_ar": "تطوير الويب المتكامل (فول ستاك)",
+      "department": "Software",
+      "industry": [
+        "Technology",
+        "E-commerce"
+      ],
+      "skill_level": "Beginner",
+      "target_audience": "Beginners and career changers who want to become web developers",
+      "duration_hours": 120,
+      "duration_weeks": 12,
+      "formats": [
+        "onsite",
+        "hybrid"
+      ],
+      "language": [
+        "ar",
+        "en"
+      ],
+      "description_en": "An intensive bootcamp covering HTML, CSS, JavaScript, React, Node.js and databases, with a portfolio of three deployed projects.",
+      "description_ar": "معسكر مكثف يغطي HTML و CSS و JavaScript و React و Node.js وقواعد البيانات، مع ملف أعمال من ثلاثة مشاريع منشورة.",
+      "learning_outcomes": [
+        "Build responsive web pages with HTML and CSS",
+        "Develop interactive front ends with React",
+        "Build REST APIs with Node.js and Express",
+        "Deploy a full-stack application with a database"
+      ],
+      "modules": [
+        "HTML and CSS",
+        "JavaScript",
+        "Git and GitHub",
+        "React",
+        "Node.js and Express",
+        "Databases",
+        "Deployment",
+        "Portfolio projects"
+      ],
+      "prerequisites": [
+        "Basic computer literacy",
+        "Logical thinking"
+      ],
+      "career_opportunities": [
+        "Front-end developer",
+        "Back-end developer",
+        "Full-stack developer"
+      ],
+      "tags": [
+        "web development",
+        "javascript",
+        "react",
+        "node",
+        "programming",
+        "software"
+      ],
+      "certificate": "Academy certificate of completion",
+      "accreditation_alignment": null,
+      "instructor_ids": [
+        "INS-04"
+      ],
+      "country": [
+        "EG"
+      ]
+    },
+    {
+      "course_id": "SW-201",
+      "title_en": "Software Testing and QA Automation",
+      "title_ar": "اختبار البرمجيات وأتمتة ضمان الجودة",
+      "department": "Software",
+      "industry": [
+        "Technology",
+        "Banking",
+        "Telecom"
+      ],
+      "skill_level": "Intermediate",
+      "target_audience": "Junior testers and developers moving into QA automation",
+      "duration_hours": 60,
+      "duration_weeks": 8,
+      "formats": [
+        "online_live",
+        "hybrid"
+      ],
+      "language": [
+        "en",
+        "ar"
+      ],
+      "description_en": "Manual testing foundations plus automation with Selenium, Playwright and API testing, integrated into CI pipelines.",
+      "description_ar": "أساسيات الاختبار اليدوي مع الأتمتة باستخدام Selenium و Playwright واختبار واجهات API ودمجها في خطوط التكامل المستمر.",
+      "learning_outcomes": [
+        "Write test plans and test cases from requirements",
+        "Automate UI tests with Playwright",
+        "Automate API tests with Postman and pytest",
+        "Run automated tests in a CI pipeline"
+      ],
+      "modules": [
+        "Testing fundamentals",
+        "Test design techniques",
+        "Bug reporting",
+        "UI automation",
+        "API testing",
+        "Performance testing intro",
+        "CI integration"
+      ],
+      "prerequisites": [
+        "Basic programming in any language"
+      ],
+      "career_opportunities": [
+        "QA engineer",
+        "Test automation engineer",
+        "SDET"
+      ],
+      "tags": [
+        "testing",
+        "qa",
+        "automation",
+        "selenium",
+        "playwright",
+        "istqb"
+      ],
+      "certificate": "Academy certificate of completion",
+      "accreditation_alignment": "Syllabus mapped to ISTQB Foundation topics (exam not included; alignment, not accreditation)",
+      "instructor_ids": [
+        "INS-05"
+      ],
+      "country": [
+        "EG",
+        "SA"
+      ]
+    },
+    {
+      "course_id": "CL-101",
+      "title_en": "AWS Cloud Practitioner Exam Prep",
+      "title_ar": "التحضير لامتحان AWS Cloud Practitioner",
+      "department": "Cloud",
+      "industry": [
+        "Technology",
+        "Government",
+        "Finance"
+      ],
+      "skill_level": "Beginner",
+      "target_audience": "IT and non-IT professionals starting in cloud computing",
+      "duration_hours": 24,
+      "duration_weeks": 3,
+      "formats": [
+        "online_live"
+      ],
+      "language": [
+        "en",
+        "ar"
+      ],
+      "description_en": "Cloud concepts, core AWS services, security, pricing and support, with practice exams to prepare for the AWS Certified Cloud Practitioner exam.",
+      "description_ar": "مفاهيم الحوسبة السحابية وخدمات AWS الأساسية والأمان والتسعير والدعم، مع امتحانات تجريبية للتحضير لشهادة AWS Cloud Practitioner.",
+      "learning_outcomes": [
+        "Describe cloud concepts and the AWS shared responsibility model",
+        "Identify core AWS compute, storage and database services",
+        "Estimate costs with AWS pricing tools",
+        "Pass a full-length practice exam"
+      ],
+      "modules": [
+        "Cloud concepts",
+        "Core services",
+        "Security and compliance",
+        "Billing and pricing",
+        "Practice exams"
+      ],
+      "prerequisites": [
+        "None"
+      ],
+      "career_opportunities": [
+        "Cloud support associate",
+        "IT specialist",
+        "Pre-sales roles"
+      ],
+      "tags": [
+        "cloud",
+        "aws",
+        "certification",
+        "beginner"
+      ],
+      "certificate": "Academy certificate; official AWS exam booked separately",
+      "accreditation_alignment": "Aligned with the AWS Certified Cloud Practitioner exam guide (not an AWS-authorized course unless confirmed)",
+      "instructor_ids": [
+        "INS-06"
+      ],
+      "country": [
+        "EG",
+        "SA"
+      ]
+    },
+    {
+      "course_id": "CL-201",
+      "title_en": "DevOps with Docker, Kubernetes and CI/CD",
+      "title_ar": "ديف أوبس باستخدام دوكر وكوبرنيتس والتكامل المستمر",
+      "department": "Cloud",
+      "industry": [
+        "Technology",
+        "Telecom"
+      ],
+      "skill_level": "Intermediate",
+      "target_audience": "Developers and system administrators moving into DevOps",
+      "duration_hours": 60,
+      "duration_weeks": 8,
+      "formats": [
+        "online_live",
+        "hybrid"
+      ],
+      "language": [
+        "en"
+      ],
+      "description_en": "Containerize applications with Docker, orchestrate them with Kubernetes, and automate build-test-deploy pipelines with GitHub Actions.",
+      "description_ar": "تحويل التطبيقات إلى حاويات باستخدام دوكر وإدارتها بكوبرنيتس وأتمتة خطوط البناء والاختبار والنشر باستخدام GitHub Actions.",
+      "learning_outcomes": [
+        "Build and optimize Docker images",
+        "Deploy and scale workloads on Kubernetes",
+        "Create CI/CD pipelines with GitHub Actions",
+        "Monitor applications with Prometheus and Grafana"
+      ],
+      "modules": [
+        "Linux essentials",
+        "Docker",
+        "Kubernetes",
+        "CI/CD",
+        "Infrastructure as code intro",
+        "Monitoring",
+        "Capstone"
+      ],
+      "prerequisites": [
+        "Linux command line",
+        "Basic programming"
+      ],
+      "career_opportunities": [
+        "DevOps engineer",
+        "Cloud engineer",
+        "Site reliability engineer"
+      ],
+      "tags": [
+        "devops",
+        "docker",
+        "kubernetes",
+        "ci/cd",
+        "cloud",
+        "linux"
+      ],
+      "certificate": "Academy certificate of completion",
+      "accreditation_alignment": null,
+      "instructor_ids": [
+        "INS-06"
+      ],
+      "country": [
+        "EG",
+        "SA"
+      ]
+    },
+    {
+      "course_id": "CY-101",
+      "title_en": "Cybersecurity Fundamentals",
+      "title_ar": "أساسيات الأمن السيبراني",
+      "department": "Cybersecurity",
+      "industry": [
+        "Banking",
+        "Government",
+        "Technology"
+      ],
+      "skill_level": "Beginner",
+      "target_audience": "IT graduates and network staff starting a security career",
+      "duration_hours": 40,
+      "duration_weeks": 5,
+      "formats": [
+        "online_live",
+        "onsite"
+      ],
+      "language": [
+        "ar",
+        "en"
+      ],
+      "description_en": "Core security concepts: networks, threats and attacks, cryptography basics, identity and access, and hands-on labs with common security tools.",
+      "description_ar": "مفاهيم الأمن الأساسية: الشبكات، والتهديدات والهجمات، وأساسيات التشفير، وإدارة الهوية والصلاحيات، مع معامل عملية بأدوات الأمن الشائعة.",
+      "learning_outcomes": [
+        "Explain common attack types and defenses",
+        "Analyze network traffic with Wireshark",
+        "Apply basic hardening to Windows and Linux systems",
+        "Respond to a simulated security incident"
+      ],
+      "modules": [
+        "Networking for security",
+        "Threat landscape",
+        "Cryptography basics",
+        "Identity and access",
+        "System hardening",
+        "Incident response",
+        "Labs"
+      ],
+      "prerequisites": [
+        "Basic networking knowledge"
+      ],
+      "career_opportunities": [
+        "SOC analyst (tier 1)",
+        "Security support specialist",
+        "IT auditor assistant"
+      ],
+      "tags": [
+        "cybersecurity",
+        "security",
+        "network",
+        "soc",
+        "beginner"
+      ],
+      "certificate": "Academy certificate of completion",
+      "accreditation_alignment": null,
+      "instructor_ids": [
+        "INS-07"
+      ],
+      "country": [
+        "EG",
+        "SA"
+      ]
+    },
+    {
+      "course_id": "BU-101",
+      "title_en": "Project Management Professional (PMP) Exam Prep",
+      "title_ar": "التحضير لشهادة إدارة المشاريع الاحترافية PMP",
+      "department": "Business",
+      "industry": [
+        "Construction",
+        "Technology",
+        "Government",
+        "Oil and Gas"
+      ],
+      "skill_level": "Intermediate",
+      "target_audience": "Project coordinators and managers with project experience preparing for PMP",
+      "duration_hours": 35,
+      "duration_weeks": 5,
+      "formats": [
+        "online_live",
+        "onsite"
+      ],
+      "language": [
+        "ar",
+        "en"
+      ],
+      "description_en": "Covers predictive, agile and hybrid project management across the PMP exam domains, with practice questions and exam strategy. Provides 35 contact hours of project management education.",
+      "description_ar": "تغطي إدارة المشاريع التنبؤية والرشيقة والهجينة عبر مجالات امتحان PMP مع أسئلة تدريبية واستراتيجية الامتحان، وتوفر 35 ساعة تعليمية في إدارة المشاريع.",
+      "learning_outcomes": [
+        "Apply people, process and business-environment practices",
+        "Choose predictive, agile or hybrid approaches for a project",
+        "Build a schedule, budget and risk register",
+        "Complete full-length practice exams"
+      ],
+      "modules": [
+        "People domain",
+        "Process domain",
+        "Business environment",
+        "Agile and hybrid",
+        "Exam practice"
+      ],
+      "prerequisites": [
+        "Project management experience (required by PMI for the exam)"
+      ],
+      "career_opportunities": [
+        "Project manager",
+        "PMO specialist",
+        "Program coordinator"
+      ],
+      "tags": [
+        "project management",
+        "pmp",
+        "pmi",
+        "business",
+        "certification",
+        "management"
+      ],
+      "certificate": "Academy certificate with 35 contact hours",
+      "accreditation_alignment": "Content aligned with the PMP Examination Content Outline (Authorized Training Partner status must be confirmed before claiming it)",
+      "instructor_ids": [
+        "INS-08"
+      ],
+      "country": [
+        "EG",
+        "SA"
+      ]
+    },
+    {
+      "course_id": "BU-102",
+      "title_en": "Digital Marketing Essentials",
+      "title_ar": "أساسيات التسويق الرقمي",
+      "department": "Business",
+      "industry": [
+        "Retail",
+        "E-commerce",
+        "Media"
+      ],
+      "skill_level": "Beginner",
+      "target_audience": "Marketing beginners, entrepreneurs and small business owners",
+      "duration_hours": 30,
+      "duration_weeks": 4,
+      "formats": [
+        "online_live",
+        "onsite"
+      ],
+      "language": [
+        "ar"
+      ],
+      "description_en": "Plan and run digital campaigns: social media marketing, paid ads on Meta and Google, SEO basics, email marketing and measuring results.",
+      "description_ar": "تخطيط وتنفيذ الحملات الرقمية: التسويق عبر وسائل التواصل، والإعلانات المدفوعة على ميتا وجوجل، وأساسيات تحسين محركات البحث، والتسويق بالبريد، وقياس النتائج.",
+      "learning_outcomes": [
+        "Build a simple digital marketing plan",
+        "Launch a paid social media campaign",
+        "Apply on-page SEO basics",
+        "Measure campaign results with analytics"
+      ],
+      "modules": [
+        "Marketing foundations",
+        "Social media",
+        "Paid ads",
+        "SEO",
+        "Email marketing",
+        "Analytics",
+        "Campaign project"
+      ],
+      "prerequisites": [
+        "None"
+      ],
+      "career_opportunities": [
+        "Digital marketing specialist",
+        "Social media specialist",
+        "Content marketer"
+      ],
+      "tags": [
+        "marketing",
+        "digital marketing",
+        "social media",
+        "seo",
+        "ads",
+        "business"
+      ],
+      "certificate": "Academy certificate of completion",
+      "accreditation_alignment": null,
+      "instructor_ids": [
+        "INS-09"
+      ],
+      "country": [
+        "EG",
+        "SA"
+      ]
+    },
+    {
+      "course_id": "BU-201",
+      "title_en": "Agile Scrum Master",
+      "title_ar": "سكرم ماستر والمنهجيات الرشيقة",
+      "department": "Business",
+      "industry": [
+        "Technology",
+        "Banking",
+        "Telecom"
+      ],
+      "skill_level": "Intermediate",
+      "target_audience": "Team leads, project managers and developers working in agile teams",
+      "duration_hours": 16,
+      "duration_weeks": 2,
+      "formats": [
+        "online_live",
+        "onsite"
+      ],
+      "language": [
+        "en",
+        "ar"
+      ],
+      "description_en": "The Scrum framework in practice: roles, events, artifacts, facilitation and coaching, with simulations and preparation for a Scrum Master certification exam.",
+      "description_ar": "إطار سكرم عمليًا: الأدوار والفعاليات والمخرجات والتيسير والتوجيه، مع محاكاة وتحضير لامتحان شهادة سكرم ماستر.",
+      "learning_outcomes": [
+        "Explain Scrum roles, events and artifacts",
+        "Facilitate sprint planning and retrospectives",
+        "Coach a team on agile practices",
+        "Prepare for a Scrum Master certification exam"
+      ],
+      "modules": [
+        "Agile mindset",
+        "Scrum framework",
+        "Facilitation",
+        "Scaling basics",
+        "Exam preparation"
+      ],
+      "prerequisites": [
+        "Some team or project experience recommended"
+      ],
+      "career_opportunities": [
+        "Scrum master",
+        "Agile coach (junior)",
+        "Delivery lead"
+      ],
+      "tags": [
+        "agile",
+        "scrum",
+        "scrum master",
+        "management",
+        "business",
+        "certification"
+      ],
+      "certificate": "Academy certificate of completion",
+      "accreditation_alignment": null,
+      "instructor_ids": [
+        "INS-08"
+      ],
+      "country": [
+        "EG",
+        "SA"
+      ]
+    },
+    {
+      "course_id": "PD-101",
+      "title_en": "Train the Trainer (TOT)",
+      "title_ar": "إعداد المدربين (TOT)",
+      "department": "Professional Development",
+      "industry": [
+        "Education",
+        "Corporate Learning",
+        "Government"
+      ],
+      "skill_level": "Intermediate",
+      "target_audience": "Subject-matter experts, HR and L&D staff who deliver training",
+      "duration_hours": 30,
+      "duration_weeks": 3,
+      "formats": [
+        "onsite",
+        "hybrid"
+      ],
+      "language": [
+        "ar"
+      ],
+      "description_en": "Design and deliver effective training: adult learning principles, writing learning outcomes, session design, facilitation skills and evaluating training impact.",
+      "description_ar": "تصميم وتقديم تدريب فعال: مبادئ تعلم الكبار، وصياغة نواتج التعلم، وتصميم الجلسات، ومهارات التيسير، وتقييم أثر التدريب.",
+      "learning_outcomes": [
+        "Apply adult learning principles to session design",
+        "Write measurable learning outcomes",
+        "Facilitate an interactive training session",
+        "Evaluate training using the Kirkpatrick model"
+      ],
+      "modules": [
+        "Adult learning",
+        "Training needs analysis",
+        "Learning outcomes",
+        "Session design",
+        "Facilitation",
+        "Evaluation",
+        "Microteaching"
+      ],
+      "prerequisites": [
+        "Expertise in a subject area"
+      ],
+      "career_opportunities": [
+        "Corporate trainer",
+        "L&D specialist",
+        "Instructor"
+      ],
+      "tags": [
+        "training",
+        "tot",
+        "trainer",
+        "teaching",
+        "learning and development",
+        "soft skills"
+      ],
+      "certificate": "Academy certificate of completion",
+      "accreditation_alignment": null,
+      "instructor_ids": [
+        "INS-10"
+      ],
+      "country": [
+        "EG",
+        "SA"
+      ]
+    },
+    {
+      "course_id": "AI-301",
+      "title_en": "Deep Learning with PyTorch",
+      "title_ar": "Deep Learning with PyTorch",
+      "department": "AI",
+      "industry": [
+        "Technology",
+        "Healthcare",
+        "Telecom"
+      ],
+      "skill_level": "Advanced",
+      "target_audience": "Engineers and data scientists who already know machine learning and want to build neural networks",
+      "duration_hours": 48,
+      "duration_weeks": 8,
+      "formats": [
+        "online_live",
+        "hybrid"
+      ],
+      "language": [
+        "en"
+      ],
+      "description_en": "Train and deploy modern neural networks with PyTorch: CNNs, graph neural networks, transformers and generative models, with weekly labs on real datasets and a deployed capstone.",
+      "description_ar": "Train and deploy modern neural networks with PyTorch: CNNs, graph neural networks, transformers and generative models, with weekly labs on real datasets and a deployed capstone.",
+      "learning_outcomes": [
+        "Train and debug deep networks in PyTorch",
+        "Build CNNs for images and GNNs for graph data",
+        "Implement a transformer from scratch",
+        "Fine-tune a pretrained model for a business task"
+      ],
+      "modules": [
+        "Neural network training",
+        "Convolutional networks",
+        "Graph neural networks",
+        "Transformers and attention",
+        "Generative models",
+        "Scaling and deployment",
+        "Capstone"
+      ],
+      "prerequisites": [
+        "Python programming",
+        "Machine learning basics",
+        "Linear algebra"
+      ],
+      "career_opportunities": [
+        "Deep learning engineer",
+        "Computer vision engineer",
+        "AI research engineer"
+      ],
+      "tags": [
+        "ai",
+        "machine learning",
+        "deep learning",
+        "pytorch",
+        "neural networks",
+        "transformers"
+      ],
+      "certificate": "Academy certificate of completion",
+      "accreditation_alignment": null,
+      "instructor_ids": [
+        "INS-01"
+      ],
+      "country": [
+        "EG",
+        "SA"
+      ]
+    },
+    {
+      "course_id": "DS-201",
+      "title_en": "Machine Learning Engineering and MLOps",
+      "title_ar": "Machine Learning Engineering and MLOps",
+      "department": "Data",
+      "industry": [
+        "Technology",
+        "Banking",
+        "E-commerce"
+      ],
+      "skill_level": "Intermediate",
+      "target_audience": "Data analysts and developers moving into production machine learning",
+      "duration_hours": 40,
+      "duration_weeks": 8,
+      "formats": [
+        "online_live"
+      ],
+      "language": [
+        "en",
+        "ar"
+      ],
+      "description_en": "Take machine learning models from notebook to production: feature pipelines, experiment tracking, model serving with Docker and monitoring for data drift.",
+      "description_ar": "Take machine learning models from notebook to production: feature pipelines, experiment tracking, model serving with Docker and monitoring for data drift.",
+      "learning_outcomes": [
+        "Build reproducible training pipelines",
+        "Track experiments and version models",
+        "Serve models behind an API with Docker",
+        "Monitor models in production"
+      ],
+      "modules": [
+        "ML project workflow",
+        "Feature engineering",
+        "Experiment tracking",
+        "Model serving",
+        "Docker for ML",
+        "Monitoring and drift",
+        "Capstone"
+      ],
+      "prerequisites": [
+        "Python programming",
+        "Basic statistics"
+      ],
+      "career_opportunities": [
+        "Machine learning engineer",
+        "MLOps engineer",
+        "Data scientist"
+      ],
+      "tags": [
+        "machine learning",
+        "data science",
+        "mlops",
+        "python",
+        "docker"
+      ],
+      "certificate": "Academy certificate of completion",
+      "accreditation_alignment": null,
+      "instructor_ids": [
+        "INS-01",
+        "INS-06"
+      ],
+      "country": [
+        "EG"
+      ]
+    },
+    {
+      "course_id": "SW-301",
+      "title_en": "Mobile App Development with React Native",
+      "title_ar": "Mobile App Development with React Native",
+      "department": "Software",
+      "industry": [
+        "Technology",
+        "Retail",
+        "Media"
+      ],
+      "skill_level": "Intermediate",
+      "target_audience": "Web developers who want to build Android and iOS apps from one codebase",
+      "duration_hours": 45,
+      "duration_weeks": 9,
+      "formats": [
+        "hybrid",
+        "onsite"
+      ],
+      "language": [
+        "ar",
+        "en"
+      ],
+      "description_en": "Build and publish cross-platform mobile apps with React Native and Expo: navigation, state management, REST APIs, offline storage and store release.",
+      "description_ar": "Build and publish cross-platform mobile apps with React Native and Expo: navigation, state management, REST APIs, offline storage and store release.",
+      "learning_outcomes": [
+        "Build cross-platform screens with React Native",
+        "Manage app state and navigation",
+        "Connect apps to REST APIs",
+        "Publish an app to Google Play and the App Store"
+      ],
+      "modules": [
+        "React refresher",
+        "React Native basics",
+        "Navigation",
+        "State management",
+        "APIs and authentication",
+        "Offline storage",
+        "Testing and release"
+      ],
+      "prerequisites": [
+        "JavaScript",
+        "React basics"
+      ],
+      "career_opportunities": [
+        "Mobile developer",
+        "React Native developer",
+        "Front-end developer"
+      ],
+      "tags": [
+        "programming",
+        "javascript",
+        "react",
+        "mobile development",
+        "react native"
+      ],
+      "certificate": "Academy certificate of completion",
+      "accreditation_alignment": null,
+      "instructor_ids": [
+        "INS-04"
+      ],
+      "country": [
+        "EG",
+        "SA"
+      ]
+    },
+    {
+      "course_id": "CY-201",
+      "title_en": "Ethical Hacking and Penetration Testing",
+      "title_ar": "Ethical Hacking and Penetration Testing",
+      "department": "Cybersecurity",
+      "industry": [
+        "Banking",
+        "Government",
+        "Telecom"
+      ],
+      "skill_level": "Intermediate",
+      "target_audience": "IT and network professionals preparing for offensive security roles",
+      "duration_hours": 42,
+      "duration_weeks": 7,
+      "formats": [
+        "onsite",
+        "hybrid"
+      ],
+      "language": [
+        "en"
+      ],
+      "description_en": "Learn how attackers think and how to test systems legally: reconnaissance, web and network exploitation, privilege escalation and professional pentest reporting in a lab environment.",
+      "description_ar": "Learn how attackers think and how to test systems legally: reconnaissance, web and network exploitation, privilege escalation and professional pentest reporting in a lab environment.",
+      "learning_outcomes": [
+        "Plan a penetration test within legal scope",
+        "Find and exploit common web vulnerabilities",
+        "Escalate privileges on Linux and Windows",
+        "Write a professional pentest report"
+      ],
+      "modules": [
+        "Ethics and scoping",
+        "Reconnaissance",
+        "Web application attacks",
+        "Network attacks",
+        "Privilege escalation",
+        "Reporting"
+      ],
+      "prerequisites": [
+        "Networking fundamentals",
+        "Linux command line"
+      ],
+      "career_opportunities": [
+        "Penetration tester",
+        "Security analyst",
+        "Red team engineer"
+      ],
+      "tags": [
+        "cybersecurity",
+        "security",
+        "penetration testing",
+        "ethical hacking"
+      ],
+      "certificate": "Academy certificate of completion",
+      "accreditation_alignment": null,
+      "instructor_ids": [
+        "INS-07"
+      ],
+      "country": [
+        "EG",
+        "SA"
+      ]
+    },
+    {
+      "course_id": "BU-301",
+      "title_en": "Data-Driven Digital Marketing",
+      "title_ar": "Data-Driven Digital Marketing",
+      "department": "Business",
+      "industry": [
+        "Retail",
+        "E-commerce",
+        "Media"
+      ],
+      "skill_level": "Beginner",
+      "target_audience": "Marketers, business owners and graduates starting in digital marketing",
+      "duration_hours": 24,
+      "duration_weeks": 4,
+      "formats": [
+        "online_live"
+      ],
+      "language": [
+        "ar"
+      ],
+      "description_en": "Plan, run and measure digital campaigns: SEO, paid social, email marketing and analytics dashboards to decide where to spend the budget.",
+      "description_ar": "Plan, run and measure digital campaigns: SEO, paid social, email marketing and analytics dashboards to decide where to spend the budget.",
+      "learning_outcomes": [
+        "Build a digital marketing plan",
+        "Run paid social and search campaigns",
+        "Measure results with analytics",
+        "Report campaign performance"
+      ],
+      "modules": [
+        "Marketing strategy",
+        "SEO basics",
+        "Paid social ads",
+        "Email marketing",
+        "Analytics and dashboards"
+      ],
+      "prerequisites": [
+        "None"
+      ],
+      "career_opportunities": [
+        "Digital marketing specialist",
+        "Social media manager",
+        "Marketing analyst"
+      ],
+      "tags": [
+        "marketing",
+        "digital marketing",
+        "seo",
+        "social media",
+        "ads"
+      ],
+      "certificate": "Academy certificate of completion",
+      "accreditation_alignment": null,
+      "instructor_ids": [
+        "INS-09"
+      ],
+      "country": [
+        "EG"
+      ]
+    }
+  ]
+}
