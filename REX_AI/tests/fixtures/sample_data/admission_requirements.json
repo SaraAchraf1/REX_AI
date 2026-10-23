@@ -1,0 +1,18 @@
+{
+  "_meta": {"source_id": "SRC-ACAD-ADMISSION", "status": "sample", "last_updated": "2026-10-17"},
+  "general": {
+    "en": ["Minimum age 18", "Copy of national ID or passport", "Completed registration form", "Fee payment or first installment"],
+    "ar": ["السن 18 عامًا على الأقل", "صورة بطاقة الرقم القومي أو جواز السفر", "استمارة تسجيل مكتملة", "سداد الرسوم أو القسط الأول"]
+  },
+  "by_level": {
+    "Beginner": {"placement_test": false,
+                 "en": "No placement test. Check the listed prerequisites.",
+                 "ar": "لا يوجد اختبار تحديد مستوى. راجع المتطلبات المذكورة."},
+    "Intermediate": {"placement_test": true,
+                     "en": "Short online placement test, or proof of prior experience (CV, certificate or portfolio).",
+                     "ar": "اختبار تحديد مستوى قصير أونلاين، أو إثبات خبرة سابقة (سيرة ذاتية أو شهادة أو ملف أعمال)."},
+    "Advanced": {"placement_test": true,
+                 "en": "Placement test and an interview with the instructor.",
+                 "ar": "اختبار تحديد مستوى ومقابلة مع المدرب."}
+  }
+}

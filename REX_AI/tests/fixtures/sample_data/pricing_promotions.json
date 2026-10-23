@@ -1,0 +1,31 @@
+{
+  "_meta": {"source_id": "SRC-ACAD-PRICING", "status": "sample", "last_updated": "2026-10-17", "currency": "EGP",
+            "warning": "Sample fees. Replace with the academy's approved price list before any real use."},
+  "prices": [
+    {"course_id": "AI-101", "fee": 9500,  "installments": true},
+    {"course_id": "AI-201", "fee": 14000, "installments": true},
+    {"course_id": "DS-101", "fee": 10500, "installments": true},
+    {"course_id": "SW-101", "fee": 28000, "installments": true},
+    {"course_id": "SW-201", "fee": 13000, "installments": true},
+    {"course_id": "CL-101", "fee": 6500,  "installments": false},
+    {"course_id": "CL-201", "fee": 15000, "installments": true},
+    {"course_id": "CY-101", "fee": 9000,  "installments": true},
+    {"course_id": "BU-101", "fee": 11000, "installments": true},
+    {"course_id": "BU-102", "fee": 6000,  "installments": false},
+    {"course_id": "BU-201", "fee": 7000,  "installments": false},
+    {"course_id": "PD-101", "fee": 8000,  "installments": false}
+  ],
+  "promotions": [
+    {"promo_id": "PROMO-EARLY", "name_en": "Early-bird discount", "name_ar": "خصم الحجز المبكر",
+     "discount_pct": 15, "applies_to": "all", "condition_en": "Pay in full at least 3 weeks before the cohort starts",
+     "condition_ar": "السداد الكامل قبل بدء الدفعة بثلاثة أسابيع على الأقل", "valid_until": "2026-12-31"},
+    {"promo_id": "PROMO-GROUP", "name_en": "Group discount", "name_ar": "خصم المجموعات",
+     "discount_pct": 10, "applies_to": "all", "condition_en": "3 or more people registering together",
+     "condition_ar": "تسجيل 3 أشخاص أو أكثر معًا", "valid_until": "2026-12-31"},
+    {"promo_id": "PROMO-STUDENT", "name_en": "Student and fresh-graduate discount", "name_ar": "خصم الطلاب وحديثي التخرج",
+     "discount_pct": 20, "applies_to": ["AI-101", "DS-101", "SW-101", "CY-101", "CL-101"],
+     "condition_en": "Valid student ID or graduation within the last 12 months",
+     "condition_ar": "بطاقة طالب سارية أو التخرج خلال آخر 12 شهرًا", "valid_until": "2026-12-31"}
+  ],
+  "rules": {"stacking": "Only one promotion per registration; the highest applicable discount is applied."}
+}

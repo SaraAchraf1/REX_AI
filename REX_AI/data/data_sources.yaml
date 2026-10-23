@@ -1,0 +1,175 @@
+# REX AI — Initial data source registry (Sprint 1)
+# Every record the agents store must reference a source_id from this file
+# (brief §2: "all generated outputs are traceable to appropriate source data").
+#
+# status:   approved  = cleared for use by the agents
+#           sample    = placeholder created by the team; replace with academy-approved data
+#           to_verify = candidate source; check access, terms of use and robots.txt before automating
+# access:   file | portal_manual | portal_scrape | api | rss
+
+internal:
+  - source_id: SRC-ACAD-COURSES
+    name: Academy course catalogue (titles, descriptions, outcomes, metadata)
+    owner: Member 1
+    used_by: [rex_assistant, curriculum, document, marketing]
+    location: data/courses.json
+    access: file
+    status: sample
+    note: Replace with the academy's approved catalogue export before the Sprint 2 demo.
+  - source_id: SRC-ACAD-INSTRUCTORS
+    name: Instructor profiles
+    owner: Member 1
+    used_by: [rex_assistant, document]
+    location: data/instructors.json
+    access: file
+    status: sample
+  - source_id: SRC-ACAD-PRICING
+    name: Course fees and current promotions
+    owner: Member 1
+    used_by: [rex_assistant, marketing]
+    location: data/pricing_promotions.json
+    access: file
+    status: sample
+    note: Prices change; every answer that quotes a fee shows the valid_until date.
+  - source_id: SRC-ACAD-SCHEDULES
+    name: Cohort schedules and training formats
+    owner: Member 1
+    used_by: [rex_assistant, marketing]
+    location: data/schedules.json
+    access: file
+    status: sample
+  - source_id: SRC-ACAD-FAQ
+    name: Frequently asked questions (Arabic + English)
+    owner: Member 1
+    used_by: [rex_assistant]
+    location: data/faqs.json
+    access: file
+    status: sample
+  - source_id: SRC-ACAD-ADMISSION
+    name: Admission requirements
+    owner: Member 1
+    used_by: [rex_assistant]
+    location: data/admission_requirements.json
+    access: file
+    status: sample
+  - source_id: SRC-ACAD-TEMPLATES
+    name: Reference document templates (participant guide, facilitator guide, question bank, rubric, proposal...)
+    owner: Member 3
+    used_by: [document]
+    location: data/templates/   # requested from Eslam El Hefny (brief §11)
+    access: file
+    status: to_verify
+    note: Pending from the academy; needed before the Document Agent's template work in Sprint 2.
+
+tenders:
+  # Geographic scope is Egypt + Saudi Arabia ONLY (brief, Agent 2 strict rule).
+  - source_id: SRC-EG-ETENDERS
+    name: Egypt Government e-Procurement Portal
+    country: EG
+    url: https://etenders.gov.eg/
+    owner: Member 2
+    access: portal_scrape
+    language: ar
+    status: to_verify
+    note: Official public-sector tenders portal; mainly Arabic. Egypt matches are flagged for immediate review.
+  - source_id: SRC-SA-ETIMAD
+    name: Etimad (Ministry of Finance) — government competitions/tenders
+    country: SA
+    url: https://portal.etimad.sa/
+    owner: Member 2
+    access: portal_manual
+    language: ar
+    status: to_verify
+    note: Viewing tender details and buying RFP documents may need a registered account; start with the public listing.
+  - source_id: SRC-SA-HRSD
+    name: Ministry of Human Resources and Social Development — tenders page
+    country: SA
+    url: https://www.hrsd.gov.sa/
+    owner: Member 2
+    access: portal_scrape
+    status: to_verify
+  - source_id: SRC-SA-HRDF
+    name: HRDF (Human Resources Development Fund) — competitions and purchases
+    country: SA
+    url: https://hrdf.org.sa/en/about/competitions-and-purchases-1/competitions-and-purchases
+    owner: Member 2
+    access: portal_scrape
+    status: to_verify
+    note: Training-focused public buyer; high relevance for the academy.
+  - source_id: SRC-INTL-WB
+    name: World Bank procurement notices (filter country = Egypt / Saudi Arabia)
+    country: [EG, SA]
+    url: https://projects.worldbank.org/en/projects-operations/procurement
+    owner: Member 2
+    access: portal_scrape
+    status: to_verify
+    note: Donor-funded tenders delivered in Egypt; keep only notices where country is EG or SA.
+  - source_id: SRC-INTL-AFDB
+    name: African Development Bank procurement (Egypt projects)
+    country: EG
+    url: https://www.afdb.org/en/projects-and-operations/procurement
+    owner: Member 2
+    access: portal_scrape
+    status: to_verify
+  - source_id: SRC-INTL-UNGM
+    name: United Nations Global Marketplace (filter country = Egypt / Saudi Arabia)
+    country: [EG, SA]
+    url: https://www.ungm.org/Public/Notice
+    owner: Member 2
+    access: portal_scrape
+    status: to_verify
+
+curriculum_references:
+  # Ingested into the shared RAG (rex_ai/core/rag.py), collection "curriculum_refs".
+  - source_id: SRC-MIT-OCW-6.7960
+    name: MIT OpenCourseWare 6.7960 Deep Learning (Fall 2024) — lecture notes
+    country: INTL
+    url: https://ocw.mit.edu/courses/6-7960-deep-learning-fall-2024/lists/lecture-notes/
+    owner: Member 2
+    used_by: [curriculum, document, marketing]
+    access: file
+    status: approved
+    note: CC BY-NC-SA 4.0 — academic use with attribution. Loaded by scripts/ingest_mit_ocw.py.
+
+accreditation_and_competency:
+  # Used by the Curriculum Agent for alignment ONLY — never to claim official accreditation.
+  - source_id: SRC-EG-NAQAAE
+    name: National Authority for Quality Assurance and Accreditation of Education (Egypt)
+    country: EG
+    url: https://naqaae.eg/en/higher_education/publications_templates
+    owner: Member 2
+    status: to_verify
+    note: Standards and templates page.
+  - source_id: SRC-SA-ETEC-NCTEA
+    name: ETEC — National Center for Training Evaluation and Accreditation (Saudi Arabia)
+    country: SA
+    url: https://www.etec.gov.sa/en/centers/nctea
+    owner: Member 2
+    status: to_verify
+  - source_id: SRC-SA-ETEC-NCAAA
+    name: ETEC — National Center for Academic Accreditation and Evaluation (Saudi Arabia)
+    country: SA
+    url: https://etec.gov.sa/en/service/Program%20Accreditation/servicedocuments
+    owner: Member 2
+    status: to_verify
+  - source_id: SRC-INTL-SFIA
+    name: SFIA — Skills Framework for the Information Age
+    country: INTL
+    url: https://sfia-online.org/
+    owner: Member 2
+    status: to_verify
+    note: IT skill levels 1–7; good fit for software, data, cloud and security courses.
+  - source_id: SRC-INTL-ESCO
+    name: ESCO — European Skills, Competences, Qualifications and Occupations
+    country: INTL
+    url: https://esco.ec.europa.eu/
+    owner: Member 2
+    access: api
+    status: to_verify
+    note: Free API for occupation → skill lists (industry skill requirements).
+  - source_id: SRC-INTL-ONET
+    name: O*NET OnLine occupation and skill data
+    country: INTL
+    url: https://www.onetonline.org/
+    owner: Member 2
+    status: to_verify

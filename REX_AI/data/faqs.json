@@ -1,0 +1,208 @@
+{
+ "_meta": {
+  "source_id": "SRC-ACAD-FAQ",
+  "status": "sample",
+  "last_updated": "2026-10-17"
+ },
+ "faqs": [
+  {
+   "faq_id": "FAQ-01",
+   "category": "certificate",
+   "q_en": "Do I get a certificate?",
+   "a_en": "Yes. Everyone who attends at least 80% of sessions and completes the final project receives an academy certificate of completion.",
+   "q_ar": "هل أحصل على شهادة؟",
+   "a_ar": "نعم. كل من يحضر 80% على الأقل من الجلسات ويكمل المشروع النهائي يحصل على شهادة إتمام من الأكاديمية.",
+   "keywords": [
+    "certificate",
+    "completion"
+   ]
+  },
+  {
+   "faq_id": "FAQ-02",
+   "category": "certificate",
+   "q_en": "Is the course officially accredited?",
+   "a_en": "Some courses are aligned with an exam guide or competency framework; this is shown on each course. Alignment is not the same as official accreditation, and we only claim accreditation where it is documented.",
+   "q_ar": "هل الدورة معتمدة رسميًا؟",
+   "a_ar": "بعض الدورات متوافقة مع دليل امتحان أو إطار كفاءات، ويظهر ذلك في تفاصيل كل دورة. التوافق ليس اعتمادًا رسميًا، ولا نذكر الاعتماد إلا إذا كان موثقًا.",
+   "keywords": [
+    "accredited",
+    "accreditation",
+    "official",
+    "معتمد",
+    "اعتماد"
+   ]
+  },
+  {
+   "faq_id": "FAQ-03",
+   "category": "payment",
+   "q_en": "Can I pay in installments?",
+   "a_en": "Courses marked with installments can be paid in up to 3 monthly payments. Short courses are paid in full at registration.",
+   "q_ar": "هل يمكنني الدفع بالتقسيط؟",
+   "a_ar": "الدورات التي تتيح التقسيط يمكن دفعها على 3 أقساط شهرية بحد أقصى، أما الدورات القصيرة فتُدفع كاملة عند التسجيل.",
+   "keywords": [
+    "installments",
+    "monthly payments",
+    "تقسيط",
+    "أقساط"
+   ]
+  },
+  {
+   "faq_id": "FAQ-04",
+   "category": "payment",
+   "q_en": "What payment methods do you accept?",
+   "a_en": "Bank transfer, credit or debit card, and mobile wallets.",
+   "q_ar": "ما طرق الدفع المتاحة؟",
+   "a_ar": "التحويل البنكي، وبطاقات الائتمان أو الخصم، والمحافظ الإلكترونية.",
+   "keywords": [
+    "payment methods",
+    "card",
+    "wallet",
+    "transfer",
+    "طرق الدفع",
+    "فيزا",
+    "محفظة"
+   ]
+  },
+  {
+   "faq_id": "FAQ-05",
+   "category": "refund",
+   "q_en": "What is the refund policy?",
+   "a_en": "Full refund up to 7 days before the start date; 50% refund until the end of the first week; no refund after that.",
+   "q_ar": "ما سياسة الاسترداد؟",
+   "a_ar": "استرداد كامل حتى 7 أيام قبل موعد البدء، و50% حتى نهاية الأسبوع الأول، ولا يوجد استرداد بعد ذلك.",
+   "keywords": [
+    "refund",
+    "cancel",
+    "money back",
+    "استرداد",
+    "استرجاع",
+    "إلغاء"
+   ]
+  },
+  {
+   "faq_id": "FAQ-06",
+   "category": "format",
+   "q_en": "What is the difference between online live, onsite and hybrid?",
+   "a_en": "Online live sessions run on video calls at fixed times; onsite sessions are in person at the academy; hybrid combines both.",
+   "q_ar": "ما الفرق بين الأونلاين المباشر والحضوري والهجين؟",
+   "a_ar": "الأونلاين المباشر جلسات فيديو في مواعيد ثابتة، والحضوري في مقر الأكاديمية، والهجين يجمع بين الاثنين.",
+   "keywords": [
+    "online",
+    "onsite",
+    "hybrid",
+    "difference",
+    "الفرق"
+   ]
+  },
+  {
+   "faq_id": "FAQ-07",
+   "category": "format",
+   "q_en": "Are sessions recorded?",
+   "a_en": "Online live sessions are recorded and available for 3 months after the course ends.",
+   "q_ar": "هل الجلسات مسجلة؟",
+   "a_ar": "جلسات الأونلاين المباشر مسجلة ومتاحة لمدة 3 أشهر بعد انتهاء الدورة.",
+   "keywords": [
+    "recorded",
+    "recording",
+    "recordings",
+    "تسجيل الجلسات",
+    "مسجلة"
+   ]
+  },
+  {
+   "faq_id": "FAQ-08",
+   "category": "admission",
+   "q_en": "Is there a placement test?",
+   "a_en": "Intermediate courses have a short online placement test to make sure you meet the prerequisites. Beginner courses have no test.",
+   "q_ar": "هل يوجد اختبار تحديد مستوى؟",
+   "a_ar": "الدورات المتوسطة لها اختبار قصير أونلاين للتأكد من استيفاء المتطلبات، أما دورات المبتدئين فلا يوجد بها اختبار.",
+   "keywords": [
+    "placement test",
+    "level test",
+    "exam to join",
+    "اختبار تحديد مستوى"
+   ]
+  },
+  {
+   "faq_id": "FAQ-09",
+   "category": "admission",
+   "q_en": "What language are courses taught in?",
+   "a_en": "Each course lists its teaching language. Materials are usually in English, with explanation in Arabic where marked.",
+   "q_ar": "ما لغة التدريس؟",
+   "a_ar": "تُذكر لغة التدريس في كل دورة. المواد غالبًا بالإنجليزية مع شرح بالعربية حيث يُذكر ذلك.",
+   "keywords": [
+    "language",
+    "arabic",
+    "english",
+    "لغة"
+   ]
+  },
+  {
+   "faq_id": "FAQ-10",
+   "category": "career",
+   "q_en": "Do you help with jobs after the course?",
+   "a_en": "We offer CV review, mock interviews and share hiring partner openings. We do not guarantee employment.",
+   "q_ar": "هل تساعدون في التوظيف بعد الدورة؟",
+   "a_ar": "نقدم مراجعة السيرة الذاتية ومقابلات تجريبية ونشارك فرص شركاء التوظيف، دون ضمان للتوظيف.",
+   "keywords": [
+    "job",
+    "employment",
+    "hiring",
+    "work after",
+    "internship",
+    "توظيف",
+    "وظيفة",
+    "شغل"
+   ]
+  },
+  {
+   "faq_id": "FAQ-11",
+   "category": "equipment",
+   "q_en": "Do I need my own laptop?",
+   "a_en": "Yes, a laptop with at least 8 GB RAM is required for technical courses. Onsite labs have machines for short courses.",
+   "q_ar": "هل أحتاج إلى حاسوب خاص؟",
+   "a_ar": "نعم، يلزم حاسوب محمول بذاكرة 8 جيجابايت على الأقل للدورات التقنية، وتتوفر أجهزة في المعامل للدورات القصيرة.",
+   "keywords": [
+    "laptop",
+    "computer",
+    "pc",
+    "RAM",
+    "لابتوب",
+    "جهاز"
+   ]
+  },
+  {
+   "faq_id": "FAQ-12",
+   "category": "corporate",
+   "q_en": "Do you offer corporate or private group training?",
+   "a_en": "Yes. Any course can be delivered to a company group, onsite or online, with customized content. Ask us for a proposal.",
+   "q_ar": "هل تقدمون تدريبًا للشركات أو للمجموعات الخاصة؟",
+   "a_ar": "نعم، يمكن تقديم أي دورة لمجموعة من شركة حضوريًا أو أونلاين بمحتوى مخصص. اطلب عرضًا منا.",
+   "keywords": [
+    "company",
+    "companies",
+    "corporate",
+    "team",
+    "in-house",
+    "شركة",
+    "شركات"
+   ]
+  },
+  {
+   "faq_id": "FAQ-13",
+   "category": "privacy",
+   "q_en": "What do you do with my contact details?",
+   "a_en": "We only save your details if you agree, and only use them to follow up about courses. You can ask us to delete them at any time.",
+   "q_ar": "ماذا تفعلون ببيانات التواصل الخاصة بي؟",
+   "a_ar": "لا نحفظ بياناتك إلا بموافقتك، ونستخدمها فقط للمتابعة بشأن الدورات، ويمكنك طلب حذفها في أي وقت.",
+   "keywords": [
+    "privacy",
+    "personal data",
+    "contact details",
+    "delete my data",
+    "خصوصية",
+    "بياناتي"
+   ]
+  }
+ ]
+}

@@ -1,0 +1,24 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic[email]>=2.6
+httpx>=0.27
+streamlit>=1.35
+pyyaml>=6.0
+pytest>=8.0
+# Optional: natural-language replies via an LLM (REX works without it)
+openai>=1.30
+# Shared RAG pipeline (rex_ai/core/rag.py)
+chromadb>=1.0
+sentence-transformers>=3.0
+pdfplumber>=0.11
+# OCR for slide PDFs with badly encoded fonts (offline, models included)
+rapidocr_onnxruntime>=1.2
+pypdf>=4.0
+python-docx>=1.1
+openpyxl>=3.1
+pandas>=2.0
+numpy>=1.26
+scikit-learn>=1.4
+requests>=2.31
+beautifulsoup4>=4.12
+python-multipart>=0.0.9   # file uploads (POST /data/upload)
