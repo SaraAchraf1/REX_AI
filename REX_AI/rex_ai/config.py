@@ -28,3 +28,16 @@ RETRIEVER = os.getenv("REX_RETRIEVER", "rag").lower()
 RAG_OCR = os.getenv("REX_RAG_OCR", "auto").lower()
 # Merge new/changed catalogue files from data/catalog/ into the course data when the API starts (1/0)
 AUTO_IMPORT = os.getenv("REX_AUTO_IMPORT", "1") == "1"
+# ---- Tender / RFP Research Agent (rex_ai/agents/rfp) -------------------------
+RFP_DIR = Path(os.getenv("REX_RFP_DIR", DATA_DIR / "rfp"))
+# Pin "today" for demos on fixed sample data (YYYY-MM-DD); empty = the real date
+RFP_TODAY = os.getenv("REX_RFP_TODAY", "")
+RFP_HTTP_TIMEOUT = float(os.getenv("REX_RFP_HTTP_TIMEOUT", "20"))
+# Alerts: always stored for the dashboard; also POSTed to a webhook (Slack/Teams/n8n) and/or emailed if set
+RFP_WEBHOOK_URL = os.getenv("REX_RFP_WEBHOOK_URL", "")
+RFP_ALERT_EMAILS = [e.strip() for e in os.getenv("REX_RFP_ALERT_EMAILS", "").split(",") if e.strip()]
+SMTP_HOST = os.getenv("REX_SMTP_HOST", "")
+SMTP_PORT = int(os.getenv("REX_SMTP_PORT", "587"))
+SMTP_USER = os.getenv("REX_SMTP_USER", "")
+SMTP_PASSWORD = os.getenv("REX_SMTP_PASSWORD", "")
+SMTP_FROM = os.getenv("REX_SMTP_FROM", SMTP_USER)

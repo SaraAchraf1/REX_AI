@@ -378,7 +378,8 @@ def _save(name: str, data: dict):
 
 
 def _file_hash(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()[:24]
+    # CRLF -> LF first: a Windows checkout (git core.autocrlf) must not look like a changed catalogue
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()[:24]
 
 
 def merge(results: list[FileResult], status: Optional[str] = None) -> dict:

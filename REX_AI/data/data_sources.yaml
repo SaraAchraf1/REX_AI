@@ -52,6 +52,13 @@ internal:
     location: data/admission_requirements.json
     access: file
     status: sample
+  - source_id: SRC-ACAD-PROFILE
+    name: Academy profile for tender eligibility (registration, experience, certificates, capacity)
+    owner: Member 2
+    used_by: [rfp_research]
+    location: data/rfp/academy_profile.yaml
+    access: file
+    status: sample
   - source_id: SRC-ACAD-TEMPLATES
     name: Reference document templates (participant guide, facilitator guide, question bank, rubric, proposal...)
     owner: Member 3
@@ -63,6 +70,26 @@ internal:
 
 tenders:
   # Geographic scope is Egypt + Saudi Arabia ONLY (brief, Agent 2 strict rule).
+  # The RFP agent (rex_ai/agents/rfp) reads feeds and documents always; the public portals below are fetched
+  # only with include_live_sources=true (or --live), after robots.txt allows it.
+  - source_id: SRC-RFP-SAMPLE
+    name: Sample tender feed (team-made test data, includes out-of-scope and duplicate notices on purpose)
+    country: [EG, SA]
+    location: data/rfp/feeds/
+    owner: Member 2
+    used_by: [rfp_research]
+    access: file
+    status: sample
+    note: Replace with real exports. Any JSON / CSV / Excel listing dropped in data/rfp/feeds/ is processed.
+  - source_id: SRC-RFP-DOCS
+    name: Tender documents (RFP / RFQ / terms of reference files collected by the team)
+    country: [EG, SA]
+    location: data/rfp/documents/
+    owner: Member 2
+    used_by: [rfp_research]
+    access: file
+    status: sample
+    note: PDF / Word / TXT files; fields are extracted and every passage is indexed in the RAG collection rfp_docs.
   - source_id: SRC-EG-ETENDERS
     name: Egypt Government e-Procurement Portal
     country: EG

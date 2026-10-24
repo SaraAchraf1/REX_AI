@@ -65,7 +65,7 @@ def test_lead_saved_with_consent():
 def test_route_sends_tender_question_to_rfp_agent():
     body = client.post("/route", json={"session_id": "api-7", "message": "find training tenders in Egypt"}).json()
     assert body["agent"] == "rfp_research"
-    assert body["result"]["status"] == "not_implemented"
+    assert "answer" in body["result"]                    # Sprint 2: answered by the RFP agent
 
 
 def test_route_defaults_to_rex():

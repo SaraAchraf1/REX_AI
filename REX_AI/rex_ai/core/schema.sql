@@ -150,10 +150,26 @@ CREATE TABLE IF NOT EXISTS rfps (
     dedupe_hash              TEXT NOT NULL UNIQUE,  -- duplicate detection
     source_id                TEXT NOT NULL REFERENCES data_sources(source_id),
     source_url               TEXT,
-    last_checked             TEXT NOT NULL
+    last_checked             TEXT NOT NULL,
+    source_title             TEXT,
+    relevance_score          REAL NOT NULL DEFAULT 0,
+    matched_course_ids       TEXT,                  -- JSON list
+    priority                 TEXT NOT NULL DEFAULT 'normal',
+    first_seen               TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_rfps_country_status ON rfps(country, status);
 CREATE INDEX IF NOT EXISTS idx_rfps_deadline ON rfps(deadline);
+
+-- Alerts for newly discovered relevant RFPs (Egypt = high priority, sent immediately)
+CREATE TABLE IF NOT EXISTS rfp_alerts (
+    alert_id    TEXT PRIMARY KEY,
+    rfp_id      TEXT NOT NULL REFERENCES rfps(rfp_id) ON DELETE CASCADE,
+    country     TEXT NOT NULL,
+    priority    TEXT NOT NULL,
+    message     TEXT NOT NULL,
+    channels    TEXT NOT NULL,                      -- JSON list: dashboard, log, webhook, email
+    created_at  TEXT NOT NULL
+);
 
 -- ----------------------------------------------------------------------------
 -- Curriculum and accreditation alignment - Member 2
