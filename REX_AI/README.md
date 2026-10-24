@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # REX AI — Multi-Agent Academy Assistant
 
 Graduation project (Oct 10 – Nov 5, 2026). REX AI automates academy operations with five
@@ -7,7 +6,7 @@ specialized agents behind one orchestrator:
 | # | Agent | Owner | Status |
 | --- | --- | --- | --- |
 | 1 | REX Course Assistant (recommendation chatbot) | Member 1 | **Sprint 1 prototype working** |
-| 2 | Tender / RFP Research (Egypt + Saudi Arabia only) | Member 2 | Contract defined, Sprint 2 |
+| 2 | Tender / RFP Research (Egypt + Saudi Arabia only) | Member 2 | **Sprint 2 working** (see below) |
 | 3 | Curriculum & Accreditation Alignment | Member 2 | Contract defined, Sprint 2 |
 | 4 | Document Generation (PDF) | Member 3 | Contract defined, Sprint 2 |
 | 5 | AI Marketing | Member 1 | Contract defined, Sprint 2 |
@@ -76,10 +75,6 @@ tests/                      knowledge base, recommender and API tests
 - M1: Marketing Agent; swap BM25 for Chroma if needed; more bilingual test cases.
 - M2: RFP collector + EG/SA filter + dedupe; Curriculum generator + gap report.
 - M3: Document Agent (3 PDF templates); orchestrator v2 with job runs; app shell.
-=======
-# REX_AI
-Smart Academy Multi-Agent System designed to help an educational academy automate its daily work, such as recommending courses to students, finding training tenders, designing curricula, generating educational documents, and creating marketing campaigns.
->>>>>>> f4eb53b465e3cf0e4c35e9d55d63a981cd6d7255
 
 ## Shared RAG pipeline (Sprint 2)
 
@@ -139,3 +134,41 @@ python scripts/import_catalog.py data/catalog/sample_academy_catalog.pdf --repla
 
 The old files are backed up to `data/backup/<timestamp>/` first. Restart the API afterwards; the RAG index
 `academy_kb` rebuilds automatically.
+## Agent 2 — Educational RFP & Tender Research (Sprint 2)
+
+Finds training-related tenders in **Egypt and Saudi Arabia only**, and turns each one into a reviewed,
+traceable pipeline record. Code: `rex_ai/agents/rfp/`, dashboard: the **RFP Research** page of the Streamlit app.
+
+```
+sources ──> country filter ──> relevance ──> expiry / filters ──> duplicates ──> qualification ──> summary
+(feeds, documents, portals)  (EG/SA only)  (6 categories)       (exact + fuzzy)   (courses + profile)
+        ──> rfps table (searchable dashboard, CSV) ──> RAG index (rfp_docs) ──> alerts (EG now, SA digest)
+```
+
+| Brief requirement | Where |
+| --- | --- |
+| Search portals / approved sources | `sources.py`: JSON/CSV/Excel exports in `data/rfp/feeds/`, tender documents in `data/rfp/documents/`, live portals from `data_sources.yaml` (`--live`, robots.txt respected) |
+| Training categories | `taxonomy.py` (English + Arabic terms), `extract.classify` |
+| Extract title, organisation, country, deadline, eligibility, category, link, publication date, documents | `extract.extract_fields` (label rules, EN/AR), LLM over RAG passages when `OPENAI_API_KEY` is set; Hijri dates converted |
+| Strict Egypt / Saudi rule | `extract.detect_country`: explicit country field wins; unknown or other country = rejected with the reason |
+| Filter unrelated / expired | supply, works and catering tenders rejected; past deadlines rejected; stored ones auto-marked `expired` |
+| Duplicates | `dedupe.py`: sha256 key + fuzzy title/organisation match across portals; gaps filled from the duplicate |
+| AI summary | `agent.summarize`: LLM grounded in the tender's own documents (RAG), template otherwise |
+| May the academy qualify? | `qualify.py`: matching catalogue courses (tags + REX's `academy_kb` RAG index) and eligibility rules vs `data/rfp/academy_profile.yaml` → likely / possible / unlikely, with notes |
+| Searchable dashboard / sheet | `GET /rfp?q=&country=&status=`, `GET /rfp/export.csv`, Streamlit page |
+| Alerts | `notify.py`: Egypt = one immediate high-priority alert each (status `flagged_review`); Saudi = one digest (status `monitoring`). Stored for the dashboard; also webhook / e-mail if configured |
+| Traceability | every record has `source` (registry `source_id`), the qualification cites course ids and the profile |
+
+```bash
+REX_RFP_TODAY=2026-10-24 python scripts/run_rfp.py -v        # sample data is fixed, so pin "today" for the demo
+python scripts/run_rfp.py --country EG --days 45 --keyword "ISO 27001"
+python scripts/run_rfp.py --ask "which tenders need cybersecurity training?"
+python scripts/run_rfp.py --export rfps.csv
+pytest -q tests/test_rfp_agent.py                           # 55 test cases covering every rule above
+```
+
+The sample feed is made up on purpose to exercise every rule: of 21 notices, 5 are outside EG/SA (UAE, France,
+USA, Kenya, Jordan), 2 are not training (air conditioning, catering), 1 is expired and 3 are duplicates
+(including a tender document that matches a feed notice), leaving 10. Replace it with real portal exports:
+drop a CSV/Excel export (Arabic column names such as `اسم المنافسة`, `الجهة`, `آخر موعد لتقديم العروض` are
+understood) into `data/rfp/feeds/`, or upload it with `POST /rfp/upload`.

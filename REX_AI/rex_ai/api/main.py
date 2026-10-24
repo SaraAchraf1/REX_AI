@@ -10,14 +10,20 @@ from contextlib import asynccontextmanager
 
 from fastapi import Body, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from rex_ai import config
 from rex_ai.agents.rex.assistant import RexAssistant
 from rex_ai.agents.rex.knowledge_base import get_kb
+from rex_ai.agents.rex.text_utils import contains_any
+from rex_ai.agents.rfp import sources as rfp_sources
+from rex_ai.agents.rfp.agent import RFPResearchAgent, row_to_record
+from rex_ai.agents.rfp.taxonomy import COUNTRY_PLACES
 from rex_ai.core import data_sync, db
-from rex_ai.core.schemas import (AgentName, ChatRequest, ChatResponse, Course, ErrorResponse, Lead, LeadCreate,
-                                 RAGHit, RAGSearchRequest, RAGSearchResponse, RouteRequest, RouteResponse)
+from rex_ai.core.schemas import (AgentName, ChatRequest, ChatResponse, Country, Course, ErrorResponse, Lead,
+                                 LeadCreate, RAGHit, RAGSearchRequest, RAGSearchResponse, RFPAlert, RFPAskRequest,
+                                 RFPAskResponse, RFPCategory, RFPRecord, RFPRunRequest, RFPRunResult, RFPStatus,
+                                 RFPStatusUpdate, RouteRequest, RouteResponse)
 
 log = logging.getLogger("rex.api")
 
@@ -169,9 +175,94 @@ def rag_stats(collection: str) -> dict:
     return {k: v for k, v in stats.items() if k != "by_document"} | {"documents_list": sorted(stats["by_document"])}
 
 
-# ---------------------------------------------------------- Orchestrator (stub)
+# ------------------------------------------------------------ RFP & Tender Research (Agent 2)
+def rfp_agent() -> RFPResearchAgent:
+    rex()                                # DB initialised and academy_kb indexed (used for qualification)
+    return RFPResearchAgent()
+
+
+@app.post("/rfp/run", response_model=RFPRunResult, tags=["RFP Research"])
+def rfp_run(req: RFPRunRequest = Body(default_factory=RFPRunRequest)) -> RFPRunResult:
+    """Collect tenders (feeds, tender documents, optionally live portals), keep only training-related, open,
+    non-duplicate notices in Egypt and Saudi Arabia, assess the academy's fit, store them and send alerts."""
+    return rfp_agent().run(req)
+
+
+@app.get("/rfp", response_model=list[RFPRecord], tags=["RFP Research"])
+def rfp_list(country: Country | None = None, status: RFPStatus | None = None, category: RFPCategory | None = None,
+             qualification: str | None = None, q: str | None = None, open_only: bool = False) -> list[RFPRecord]:
+    """Searchable pipeline: Egypt (high priority) first, then by deadline. q searches title, organisation,
+    eligibility and summary."""
+    return rfp_agent().search(country and country.value, status and status.value, category and category.value,
+                              qualification, q, open_only)
+
+
+@app.get("/rfp/export.csv", tags=["RFP Research"], response_class=Response)
+def rfp_export(country: Country | None = None, status: RFPStatus | None = None) -> Response:
+    """The pipeline as CSV (UTF-8 with BOM) for Excel or Google Sheets."""
+    agent = rfp_agent()
+    csv_text = agent.export_csv(agent.search(country and country.value, status and status.value))
+    return Response(csv_text, media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": "attachment; filename=rex_rfp_pipeline.csv"})
+
+
+@app.get("/rfp/alerts", response_model=list[RFPAlert], tags=["RFP Research"])
+def rfp_alerts(limit: int = 50) -> list[RFPAlert]:
+    rex()
+    return [RFPAlert(**a) for a in db.list_rfp_alerts(limit)]
+
+
+@app.post("/rfp/ask", response_model=RFPAskResponse, tags=["RFP Research"])
+def rfp_ask(req: RFPAskRequest) -> RFPAskResponse:
+    """Question over the stored tenders and their documents (RAG collection rfp_docs), with citations."""
+    return rfp_agent().ask(req)
+
+
+@app.post("/rfp/upload", tags=["RFP Research"], responses={400: {"model": ErrorResponse}})
+def rfp_upload(file: UploadFile = File(...)) -> dict:
+    """Add a tender document (PDF / Word / TXT / MD) or a listing export (JSON / CSV / Excel).
+    It is processed on the next POST /rfp/run. Existing files are never overwritten."""
+    name = data_sync._safe_name(file.filename)
+    ext = "." + name.rsplit(".", 1)[-1].lower() if "." in name else ""
+    if ext in rfp_sources.DOC_EXTENSIONS:
+        folder, kind = rfp_sources.documents_dir(), "document"
+    elif ext in rfp_sources.FEED_EXTENSIONS:
+        folder, kind = rfp_sources.feeds_dir(), "feed"
+    else:
+        allowed = sorted(rfp_sources.DOC_EXTENSIONS | rfp_sources.FEED_EXTENSIONS)
+        return JSONResponse(status_code=400, content=ErrorResponse(
+            code="bad_file", message=f"Unsupported file type '{ext}'. Allowed: {', '.join(allowed)}").model_dump())
+    folder.mkdir(parents=True, exist_ok=True)
+    path = data_sync._unique_path(folder, name)
+    path.write_bytes(file.file.read())
+    db.log_event("INFO", "rfp_upload", agent=AgentName.rfp_research.value, detail=f"{path.name}:{kind}")
+    return {"file": path.name, "kind": kind, "status": "saved - run POST /rfp/run to process it"}
+
+
+@app.get("/rfp/{rfp_id}", response_model=RFPRecord, tags=["RFP Research"], responses={404: {"model": ErrorResponse}})
+def rfp_get(rfp_id: str) -> RFPRecord:
+    rex()
+    row = db.get_rfp(rfp_id)
+    if not row:
+        raise HTTPException(status_code=404, detail=f"RFP {rfp_id} not found")
+    return row_to_record(row)
+
+
+@app.patch("/rfp/{rfp_id}/status", response_model=RFPRecord, tags=["RFP Research"],
+           responses={404: {"model": ErrorResponse}})
+def rfp_set_status(rfp_id: str, update: RFPStatusUpdate) -> RFPRecord:
+    """Reviewer decision, e.g. flagged_review -> qualified (bid) or rejected (no bid)."""
+    rex()
+    if not db.update_rfp_status(rfp_id, update.status.value):
+        raise HTTPException(status_code=404, detail=f"RFP {rfp_id} not found")
+    db.log_event("INFO", "rfp_review", agent=AgentName.rfp_research.value,
+                 detail=f"{rfp_id}:{update.status.value} by {update.reviewer}: {update.comment or ''}")
+    return rfp_get(rfp_id)
+
+
+# ---------------------------------------------------------- Orchestrator
 ROUTING_HINTS = {
-    AgentName.rfp_research: ["tender", "rfp", "rfq", "مناقصه", "مناقصة"],
+    AgentName.rfp_research: ["tender", "rfp", "rfq", "مناقصه", "مناقصة", "مناقصات", "منافسة", "منافسات"],
     AgentName.curriculum: ["curriculum", "syllabus design", "accreditation", "منهج", "اعتماد"],
     AgentName.document: ["pdf", "participant guide", "facilitator guide", "question bank", "rubric", "proposal"],
     AgentName.marketing: ["campaign", "ad copy", "linkedin post", "caption", "whatsapp message", "حمله"],
@@ -180,12 +271,23 @@ ROUTING_HINTS = {
 
 @app.post("/route", response_model=RouteResponse, tags=["Orchestrator"])
 def route(req: RouteRequest) -> RouteResponse:
-    """Sprint 1 keyword router. Agents not built yet return a 'not_implemented' result."""
+    """Keyword router. Agents not built yet return a 'not_implemented' result."""
     text = req.message.lower()
     for agent, hints in ROUTING_HINTS.items():
         if any(h in text for h in hints):
+            if agent == AgentName.rfp_research:
+                return RouteResponse(agent=agent, intent="rfp_search", confidence=0.7, result=route_rfp(req.message))
             return RouteResponse(agent=agent, intent=agent.value, confidence=0.6,
                                  result={"status": "not_implemented", "available_in": "Sprint 2"})
     resp = rex().handle(ChatRequest(session_id=req.session_id, message=req.message))
     return RouteResponse(agent=AgentName.rex_assistant, intent=resp.intent, confidence=0.8,
                          result=resp.model_dump(mode="json"))
+
+def route_rfp(message: str) -> dict:
+    """Answer a tender question from chat; runs the research first if nothing is stored yet."""
+    agent = rfp_agent()
+    if not db.list_rfps(limit=1):
+        agent.run(RFPRunRequest())
+    countries = [c for c, places in COUNTRY_PLACES.items() if contains_any(message, places)]
+    resp = agent.ask(RFPAskRequest(question=message, country=countries[0] if len(countries) == 1 else None))
+    return resp.model_dump(mode="json")

@@ -191,3 +191,13 @@ def test_unanswerable_question_says_so(chat):
             assert not r.recommendations and not r.sources
     assert chat("I want to learn data analysis").intent == "discovery"       # profile info still starts discovery
     assert chat("Which course is best for a beginner in AI?").intent != "unknown"
+
+
+def test_line_endings_do_not_count_as_a_changed_catalogue(tmp_path):
+    """A Windows checkout (core.autocrlf) must not trigger a re-import of an unchanged catalogue."""
+    lf, crlf = tmp_path / "lf.txt", tmp_path / "crlf.txt"
+    lf.write_bytes(b"Course ID: AI-101\nTitle: Intro\n")
+    crlf.write_bytes(b"Course ID: AI-101\r\nTitle: Intro\r\n")
+    assert ci._file_hash(lf) == ci._file_hash(crlf)
+    assert json.loads((ROOT / "data" / "catalog" / ci.REGISTRY).read_text(encoding="utf-8"))[
+        "examples/sample_academy_catalog.pdf"] == ci._file_hash(SAMPLE_PDF)

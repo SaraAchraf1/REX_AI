@@ -30,7 +30,7 @@ owner whose agent uses that model (see the Owner column).
 | `FAQ` | `faqs` | M1 | faq_id, category, q/a in en and ar, keywords |
 | `LeadProfile` | `chat_sessions.profile` | M1 | background, education_level, experience_years, interests, career_goal, skill_level, preferred_format, budget, weekly_hours |
 | `LeadCreate` / `Lead` | `leads` | M1 | name, email or phone, interested_course_ids, profile, consent (must be true) |
-| `RFPRecord` | `rfps` | M2 | title, issuing_organization, country, deadline, eligibility, training_category, submission_link, publication_date, documents, summary, qualification, status, dedupe_hash, source |
+| `RFPRecord` | `rfps`, `rfp_alerts` | M2 | title, issuing_organization, country, deadline, eligibility, training_category, submission_link, publication_date, documents, summary, qualification, status, dedupe_hash, source; Sprint 2 adds relevance_score, matched_course_ids, priority, first_seen (existing databases get the columns automatically in `db.init_db`) |
 | `Curriculum`, `GapReport`, `ReviewAction` | `curricula`, `gap_reports`, `reviews`, `accreditation_standards` | M2 | objectives, audience, prerequisites, outcomes, modules, hours, exercises, assessments, capstone; coverage_pct, missing topics/outcomes |
 | `DocumentRequest` / `DocumentRecord` | `documents` | M3 | doc_type (10 types), course_id or curriculum_id, language, file_path, download_url, status |
 | `CampaignRequest` / `Campaign` | `campaigns`, `campaign_variants` | M1 | channels, objective, offer, cta, variants, course_facts_used, status |
@@ -48,8 +48,14 @@ owner whose agent uses that model (see the Owner column).
 | `POST /rag/search` | Shared RAG (all agents) | `RAGSearchRequest` → `RAGSearchResponse` (hits, cited context, sources) | Built (Sprint 2) |
 | `GET /rag/collections/{name}` | Shared RAG | — → `{chunks, documents, embedder, chunk_methods}` | Built (Sprint 2) |
 | `POST /route` | Orchestrator | `RouteRequest` → `RouteResponse` | Keyword router (Sprint 1) |
-| `POST /rfp/run` | RFP Research | `RFPRunRequest` → `RFPRunResult` | Sprint 2 (M2) |
-| `GET /rfp?country=&status=` | RFP Research | — → `RFPRecord[]` | Sprint 2 (M2) |
+| `POST /rfp/run` | RFP Research | `RFPRunRequest` → `RFPRunResult` (counts, rejections with reasons, new EG/SA ids) | Built (Sprint 2) |
+| `GET /rfp?country=&status=&category=&qualification=&q=&open_only=` | RFP Research | — → `RFPRecord[]` (Egypt first, then deadline) | Built (Sprint 2) |
+| `GET /rfp/{rfp_id}` | RFP Research | — → `RFPRecord` (404 if unknown) | Built (Sprint 2) |
+| `PATCH /rfp/{rfp_id}/status` | RFP Research | `RFPStatusUpdate {status, reviewer, comment}` → `RFPRecord` | Built (Sprint 2) |
+| `GET /rfp/export.csv` | RFP Research | — → CSV (UTF-8 BOM, opens in Excel / Google Sheets) | Built (Sprint 2) |
+| `GET /rfp/alerts` | RFP Research | — → `RFPAlert[]` | Built (Sprint 2) |
+| `POST /rfp/ask` | RFP Research | `RFPAskRequest` → `RFPAskResponse` (RAG over records + tender documents, cited) | Built (Sprint 2) |
+| `POST /rfp/upload` | RFP Research | file → `{file, kind: document/feed}` | Built (Sprint 2) |
 | `POST /curriculum` | Curriculum | `CurriculumRequest` → `Curriculum` | Sprint 2 (M2) |
 | `POST /curriculum/{id}/gap-report` | Curriculum | `{framework}` → `GapReport` | Sprint 2 (M2) |
 | `POST /curriculum/{id}/review` | Curriculum | `ReviewAction` → `Curriculum` | Sprint 2 (M2) |

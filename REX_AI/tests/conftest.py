@@ -1,4 +1,5 @@
 import os
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -9,6 +10,16 @@ os.environ["REX_USE_LLM"] = "0"
 # Isolated Chroma store + offline embedder so tests are fast, deterministic and need no download.
 os.environ["REX_CHROMA_DIR"] = str(Path(tempfile.mkdtemp()) / "chroma")
 os.environ.setdefault("REX_RAG_EMBEDDINGS", "hash")
+# A copy of data/: catalogue auto-import, uploads and merges in tests never rewrite the real data files.
+_data_copy = Path(tempfile.mkdtemp()) / "data"
+shutil.copytree(Path(__file__).resolve().parent.parent / "data", _data_copy,
+                ignore=shutil.ignore_patterns("chroma", "raw", "kb", "backup"))
+os.environ["REX_DATA_DIR"] = str(_data_copy)
+os.environ["REX_RFP_DIR"] = str(_data_copy / "rfp")
+# Fixed "today" so the sample tenders' deadlines give the same results on any date.
+os.environ["REX_RFP_TODAY"] = "2026-10-24"
+os.environ.pop("REX_RFP_WEBHOOK_URL", None)
+os.environ.pop("REX_SMTP_HOST", None)
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pytest  # noqa: E402

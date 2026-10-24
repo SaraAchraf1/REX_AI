@@ -1,0 +1,175 @@
+{
+  "_meta": {
+    "source_id": "SRC-RFP-SAMPLE",
+    "status": "sample",
+    "last_updated": "2026-10-24",
+    "warning": "SAMPLE TENDERS made up by the team to test the RFP agent. Organisations, links and dates are fictional. The file deliberately contains notices outside Egypt/Saudi Arabia, duplicates, an expired notice and non-training tenders so every filter can be demonstrated."
+  },
+  "opportunities": [
+    {
+      "title": "Digital Skills Training Program for 2,000 Government Employees",
+      "organization": "National Digital Government Agency",
+      "country": "Egypt",
+      "deadline": "2026-11-20",
+      "publication_date": "2026-10-12",
+      "category": "Digital Transformation",
+      "eligibility": "Licensed training provider registered in Egypt; minimum 5 years of experience delivering government training; ISO 9001 certified",
+      "submission_link": "https://example.com/tenders/eg/ndga-2026-031",
+      "documents": ["Terms of Reference.pdf", "Financial offer form.xlsx"],
+      "description": "Design and deliver blended digital-skills courses (Microsoft 365, data literacy, cybersecurity awareness) for 2,000 employees in Cairo and the New Administrative Capital."
+    },
+    {
+      "title": "Digital skills training programme for 2000 government employees",
+      "organization": "National Digital Government Agency (NDGA)",
+      "country": "EG",
+      "deadline": "20/11/2026",
+      "publication_date": "14/10/2026",
+      "submission_link": "https://example.com/portal/notice/88412",
+      "source_url": "https://example.com/portal/notice/88412",
+      "description": "Re-publication of the NDGA digital skills tender on a second portal."
+    },
+    {
+      "title": "Cloud and DevOps Upskilling Program for Software Engineers",
+      "organization": "Cairo Software Industry Council",
+      "country": "Egypt",
+      "deadline": "2026-12-05",
+      "publication_date": "2026-10-18",
+      "eligibility": "Training providers with certified AWS and Kubernetes instructors; at least 3 years of experience in IT training",
+      "submission_link": "https://example.com/tenders/eg/csic-114",
+      "description": "Hands-on training in AWS, Docker, Kubernetes and CI/CD pipelines for 120 software engineers."
+    },
+    {
+      "title": "Cloud and DevOps Upskilling Program for Software Engineers",
+      "organization": "Cairo Software Industry Council",
+      "country": "Egypt",
+      "deadline": "2026-12-05",
+      "source_url": "https://example.com/mirror/csic-114",
+      "description": "Same notice listed on a mirror site."
+    },
+    {
+      "title": "مناقصة عامة لتنفيذ برنامج تدريبي في إدارة المشروعات (PMP) لمهندسي المديرية",
+      "organization": "مديرية الإسكان بمحافظة الجيزة",
+      "country": "مصر",
+      "deadline": "١٥ نوفمبر ٢٠٢٦",
+      "publication_date": "٢٠ أكتوبر ٢٠٢٦",
+      "eligibility": "شركة مصرية مسجلة؛ سابقة أعمال في تدريب المهندسين لا تقل عن 3 سنوات",
+      "submission_link": "https://example.com/tenders/eg/giza-housing-77",
+      "description": "تدريب 60 مهندسًا على إدارة المشروعات والتحضير لشهادة PMP."
+    },
+    {
+      "title": "Train-the-Trainer Program for Secondary School Teachers",
+      "organization": "Upper Egypt Technical Education Directorate",
+      "country": "Egypt",
+      "deadline": "2026-09-30",
+      "publication_date": "2026-08-20",
+      "description": "TOT program for 300 teachers in Assiut and Sohag."
+    },
+    {
+      "title": "Supply and Installation of Air Conditioning Units for Training Halls",
+      "organization": "Alexandria Port Authority",
+      "country": "Egypt",
+      "deadline": "2026-11-30",
+      "description": "Supply, installation and maintenance of 40 split air conditioning units in the training center."
+    },
+    {
+      "title": "Cybersecurity Awareness and SOC Analyst Training",
+      "organization": "Delta Investment Bank",
+      "country": "Egypt",
+      "deadline": "2026-12-10",
+      "publication_date": "2026-10-21",
+      "submission_link": "https://example.com/tenders/eg/dib-cyber-2026",
+      "documents": ["DIB_cybersecurity_training_RFP.md"],
+      "description": "Security awareness for all staff and SOC analyst training for the bank's security team."
+    },
+    {
+      "title": "Agile and Leadership Development Program for Private-Sector Managers",
+      "organization": "Gulf Skills Development Fund",
+      "country": "Saudi Arabia",
+      "deadline": "2026-12-15",
+      "publication_date": "2026-10-10",
+      "category": "Corporate Learning",
+      "eligibility": "Training providers with at least 5 years of corporate training experience; bilingual trainers (Arabic and English)",
+      "submission_link": "https://example.com/tenders/sa/gsdf-2026-19",
+      "description": "Scrum, Agile project delivery and leadership workshops for 250 managers in Riyadh and Jeddah."
+    },
+    {
+      "title": "Software Testing and QA Bootcamp for National Graduates",
+      "organization": "National Graduate Readiness Program",
+      "country": "KSA",
+      "deadline": "2026-11-28",
+      "publication_date": "2026-10-15",
+      "eligibility": "Saudi commercial registration and an active Etimad account; TVTC training licence",
+      "submission_link": "https://example.com/tenders/sa/ngrp-qa",
+      "description": "12-week software testing and test automation (Selenium, Playwright, ISTQB preparation) bootcamp for 80 graduates."
+    },
+    {
+      "title": "Artificial Intelligence Upskilling Workshops for Smart City Staff",
+      "organization": "Riyadh Smart City Authority",
+      "deadline": "2027-01-10",
+      "publication_date": "2026-10-22",
+      "eligibility": "Experienced AI training providers; trainers with industry experience in machine learning and generative AI",
+      "submission_link": "https://example.com/tenders/sa/rsca-ai",
+      "description": "Workshops on machine learning, generative AI and LLM applications for 150 engineers at the authority's Riyadh headquarters."
+    },
+    {
+      "title": "Catering Services for the Training Center",
+      "organization": "Gulf Skills Development Fund",
+      "country": "Saudi Arabia",
+      "deadline": "2026-11-25",
+      "description": "Daily catering for trainees at the Dammam training center."
+    },
+    {
+      "title": "AI Training for Government Employees",
+      "organization": "Dubai Digital Authority",
+      "country": "United Arab Emirates",
+      "deadline": "2026-12-01",
+      "description": "Generative AI training for 500 government employees in Dubai."
+    },
+    {
+      "title": "Digital Skills Bootcamp for Public Servants",
+      "organization": "Ministry of Public Transformation",
+      "country": "France",
+      "deadline": "2026-12-12",
+      "description": "Digital skills courses for public servants in Paris."
+    },
+    {
+      "title": "Cybersecurity Workforce Training",
+      "organization": "State Department of Labor",
+      "country": "USA",
+      "deadline": "2026-11-30",
+      "description": "Cybersecurity training for unemployed workers in Texas."
+    },
+    {
+      "title": "ICT Capacity Building for County Staff",
+      "organization": "Nairobi County Government",
+      "deadline": "2026-12-03",
+      "description": "ICT training and capacity building for county staff in Nairobi, Kenya."
+    },
+    {
+      "title": "Train the Trainer Program for Vocational Instructors",
+      "organization": "Vocational Training Corporation",
+      "country": "Jordan",
+      "deadline": "2026-12-20",
+      "description": "TOT for 100 vocational instructors in Amman."
+    },
+    {
+      "title": "E-learning Content Development and LMS Training for Employees",
+      "organization": "Dammam Health Cluster",
+      "country": "Saudi Arabia",
+      "deadline": "1448/07/05 هـ",
+      "publication_date": "1448/04/25 هـ",
+      "eligibility": "Local content requirements apply; bid bond of 1% of the offer value",
+      "submission_link": "https://example.com/tenders/sa/dhc-elearning",
+      "description": "Develop 20 e-learning modules and train 400 employees on the new learning management system."
+    },
+    {
+      "title": "Data Analysis and Power BI Training for Statistical Staff",
+      "organization": "Alexandria Statistics Office",
+      "country": "Egypt",
+      "deadline": "TBD",
+      "publication_date": "2026-10-23",
+      "submission_link": "https://example.com/tenders/eg/aso-powerbi",
+      "description": "Excel, SQL and Power BI dashboard training for 45 statisticians."
+    }
+  ]
+}

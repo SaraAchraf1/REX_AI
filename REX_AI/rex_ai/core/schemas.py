@@ -282,14 +282,27 @@ class RFPRecord(BaseModel):
     dedupe_hash: str = Field(..., description="sha256 of normalized title + organization + deadline")
     source: SourceRef
     last_checked: datetime
+    # Sprint 2 additions (optional, backwards compatible)
+    relevance_score: float = Field(0.0, ge=0, le=1, description="How strongly the text matches training categories")
+    matched_course_ids: list[str] = Field(default_factory=list, description="Academy courses that could deliver it")
+    priority: str = Field("normal", examples=["high", "normal"], description="high = Egypt, alert immediately")
+    first_seen: Optional[datetime] = None
 
 
 class RFPRunRequest(BaseModel):
+    """Discovery questions from the brief (§10): countries, categories, priority organisations/sectors,
+    deadline range. Anything outside Egypt and Saudi Arabia is rejected even if requested."""
     countries: list[Country] = Field(default_factory=lambda: [Country.EG, Country.SA])
     categories: list[RFPCategory] = Field(default_factory=lambda: list(RFPCategory))
     deadline_from: Optional[date] = None
     deadline_to: Optional[date] = None
     source_ids: Optional[list[str]] = None
+    keywords: list[str] = Field(default_factory=list,
+                                description="Topic filter: when set, only tenders mentioning at least one are kept")
+    priority_organizations: list[str] = Field(default_factory=list,
+                                              description="Organisations/sectors to rank first, e.g. ['HRDF', 'bank']")
+    include_live_sources: bool = Field(False, description="Also fetch the public tender portals in data_sources.yaml")
+    notify: bool = Field(True, description="Send alerts for newly discovered relevant RFPs")
 
 
 class RFPRunResult(BaseModel):
@@ -302,6 +315,41 @@ class RFPRunResult(BaseModel):
     duplicates: int
     new_flagged_egypt: list[str] = Field(default_factory=list, description="rfp_ids to alert on now")
     records: list[RFPRecord] = Field(default_factory=list)
+    already_known: int = Field(0, description="Seen in an earlier run; refreshed, not alerted again")
+    rejected_filters: int = Field(0, description="Outside the requested categories or deadline range")
+    new_monitoring_saudi: list[str] = Field(default_factory=list)
+    alerts_sent: int = 0
+    rejections: list[dict[str, Any]] = Field(default_factory=list, description="title, reason - for auditing")
+    source_errors: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class RFPStatusUpdate(BaseModel):
+    status: RFPStatus
+    reviewer: str = Field(..., min_length=1)
+    comment: Optional[str] = None
+
+
+class RFPAlert(BaseModel):
+    alert_id: str
+    rfp_id: str
+    country: Country
+    priority: str
+    message: str
+    channels: list[str]
+    created_at: datetime
+
+
+class RFPAskRequest(BaseModel):
+    question: str = Field(..., min_length=2, max_length=1000, examples=["Which tenders need cybersecurity training?"])
+    country: Optional[Country] = None
+    k: int = Field(5, ge=1, le=10)
+
+
+class RFPAskResponse(BaseModel):
+    answer: str
+    rfp_ids: list[str] = Field(default_factory=list)
+    sources: list[SourceRef] = Field(default_factory=list)
+    llm_used: bool = False
 
 
 # --------------------------------------------------------------------------- #
