@@ -15,10 +15,12 @@ import pandas as pd
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from frontend.ui import api, no_fog  # noqa: E402
 from rex_ai import config  # noqa: E402
 from rex_ai.core.schemas import RFPCategory, RFPStatus  # noqa: E402
 
 st.set_page_config(page_title="REX - RFP Research", page_icon="📑", layout="wide")
+no_fog()
 
 COUNTRY = {"EG": "🇪🇬 Egypt", "SA": "🇸🇦 Saudi Arabia"}
 FIT = {"likely": "🟢 likely", "possible": "🟡 possible", "unlikely": "🔴 unlikely", "unknown": "⚪ unknown"}
@@ -27,7 +29,7 @@ FIT = {"likely": "🟢 likely", "possible": "🟡 possible", "unlikely": "🔴 u
 # ------------------------------------------------------------------ backend
 def api_available() -> bool:
     try:
-        return httpx.get(f"{config.API_URL}/health", timeout=2).status_code == 200
+        return api().get(f"{config.API_URL}/health", timeout=2).status_code == 200
     except httpx.HTTPError:
         return False
 
@@ -52,7 +54,7 @@ def local_agent():
 
 def run_research(payload: dict) -> dict:
     if API:
-        r = httpx.post(f"{config.API_URL}/rfp/run", json=payload, timeout=900)
+        r = api().post(f"{config.API_URL}/rfp/run", json=payload, timeout=900)
         r.raise_for_status()
         return r.json()
     from rex_ai.core.schemas import RFPRunRequest
@@ -62,14 +64,14 @@ def run_research(payload: dict) -> dict:
 def list_rfps(params: dict) -> list[dict]:
     params = {k: v for k, v in params.items() if v not in (None, "", False)}
     if API:
-        return httpx.get(f"{config.API_URL}/rfp", params=params, timeout=30).json()
+        return api().get(f"{config.API_URL}/rfp", params=params, timeout=30).json()
     return [r.model_dump(mode="json") for r in local_agent().search(**params)]
 
 
 def set_status(rfp_id: str, status: str, reviewer: str, comment: str) -> None:
     payload = {"status": status, "reviewer": reviewer, "comment": comment}
     if API:
-        httpx.patch(f"{config.API_URL}/rfp/{rfp_id}/status", json=payload, timeout=10).raise_for_status()
+        api().patch(f"{config.API_URL}/rfp/{rfp_id}/status", json=payload, timeout=10).raise_for_status()
         return
     from rex_ai.core import db
     db.update_rfp_status(rfp_id, status)
@@ -79,14 +81,14 @@ def set_status(rfp_id: str, status: str, reviewer: str, comment: str) -> None:
 def ask(question: str, country: str | None) -> dict:
     payload = {"question": question, **({"country": country} if country else {})}
     if API:
-        return httpx.post(f"{config.API_URL}/rfp/ask", json=payload, timeout=120).json()
+        return api().post(f"{config.API_URL}/rfp/ask", json=payload, timeout=120).json()
     from rex_ai.core.schemas import RFPAskRequest
     return local_agent().ask(RFPAskRequest(**payload)).model_dump(mode="json")
 
 
 def alerts() -> list[dict]:
     if API:
-        return httpx.get(f"{config.API_URL}/rfp/alerts", timeout=10).json()
+        return api().get(f"{config.API_URL}/rfp/alerts", timeout=10).json()
     from rex_ai.core import db
     _local_ready()
     return db.list_rfp_alerts(20)
@@ -94,7 +96,7 @@ def alerts() -> list[dict]:
 
 def upload(name: str, content: bytes) -> str:
     if API:
-        r = httpx.post(f"{config.API_URL}/rfp/upload", files={"file": (name, content)}, timeout=60)
+        r = api().post(f"{config.API_URL}/rfp/upload", files={"file": (name, content)}, timeout=60)
         if r.status_code != 200:
             raise ValueError(r.json().get("message", r.text))
         return r.json()["file"]

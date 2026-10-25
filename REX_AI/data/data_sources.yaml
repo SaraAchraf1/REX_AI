@@ -67,6 +67,14 @@ internal:
     access: file
     status: to_verify
     note: Pending from the academy; needed before the Document Agent's template work in Sprint 2.
+  - source_id: SRC-ACAD-QUALITY
+    name: Academy curriculum quality baseline (instructional-design checklist)
+    owner: Member 2
+    used_by: [curriculum]
+    location: data/curriculum/frameworks.yaml
+    access: file
+    status: sample
+    note: Applied to every curriculum by the Curriculum Agent; to be approved by the academy.
 
 tenders:
   # Geographic scope is Egypt + Saudi Arabia ONLY (brief, Agent 2 strict rule).
@@ -157,6 +165,23 @@ curriculum_references:
     access: file
     status: approved
     note: CC BY-NC-SA 4.0 — academic use with attribution. Loaded by scripts/ingest_mit_ocw.py.
+  - source_id: SRC-CUR-REFS
+    name: Reference syllabi collected by the team (data, testing, security, GenAI, cloud, healthcare, PM in Arabic)
+    country: INTL
+    location: data/curriculum/references/
+    owner: Member 2
+    used_by: [curriculum, document, marketing]
+    access: file
+    status: sample
+    note: Ingested into curriculum_refs with the metadata in references/manifest.yaml. Replace with approved references.
+  - source_id: SRC-CUR-INDUSTRY
+    name: Industry skill requirements per department (job postings EG/SA, ESCO / O*NET profiles)
+    country: [EG, SA]
+    location: data/curriculum/industry_skills.yaml
+    owner: Member 2
+    used_by: [curriculum]
+    access: file
+    status: sample
 
 accreditation_and_competency:
   # Used by the Curriculum Agent for alignment ONLY — never to claim official accreditation.
@@ -200,3 +225,24 @@ accreditation_and_competency:
     url: https://www.onetonline.org/
     owner: Member 2
     status: to_verify
+  - source_id: SRC-INTL-ISTQB
+    name: ISTQB Certified Tester Foundation Level (CTFL) v4.0 syllabus
+    country: INTL
+    url: https://www.istqb.org/certifications/certified-tester-foundation-level
+    owner: Member 2
+    status: to_verify
+    note: Chapter-level summary in data/curriculum/frameworks.yaml (ISTQB-CTFL-4).
+  - source_id: SRC-INTL-AWS-CCP
+    name: AWS Certified Cloud Practitioner (CLF-C02) exam guide
+    country: INTL
+    url: https://aws.amazon.com/certification/certified-cloud-practitioner/
+    owner: Member 2
+    status: to_verify
+    note: Domain-level summary in data/curriculum/frameworks.yaml (AWS-CLF-C02).
+  - source_id: SRC-INTL-PMI
+    name: PMI PMP Examination Content Outline (2021)
+    country: INTL
+    url: https://www.pmi.org/certifications/project-management-pmp
+    owner: Member 2
+    status: to_verify
+    note: Domain-level summary in data/curriculum/frameworks.yaml (PMI-PMP-ECO-2021).

@@ -1,0 +1,209 @@
+# REX AI — Accreditation and competency frameworks used by the Curriculum Agent (owner: Member 2)
+#
+# Used for ALIGNMENT ONLY. A curriculum that covers every item below is "aligned with" the framework;
+# it is never "accredited" or "certified" by it. Only the academy, with evidence from the awarding body,
+# may claim accreditation (brief, Agent 3 "Important" rule).
+#
+# These are TEAM SUMMARIES of public documents (status to_verify): the competency names follow the official
+# documents, the keywords are ours. Check each item against the official source before relying on it.
+#
+# competency kind:
+#   topic      covered when the curriculum's modules / topics / exercises mention it (keywords, then semantic match)
+#   outcome    covered when a learning outcome addresses it
+#   structure  a rule about the curriculum's design, checked by rex_ai/agents/curriculum/alignment.py (check: name)
+# filter_by_department: only competencies whose departments include the curriculum's department are compared.
+
+frameworks:
+  - framework_id: ISTQB-CTFL-4
+    name: ISTQB Certified Tester Foundation Level (CTFL) v4.0
+    short_name: ISTQB Foundation
+    aliases: [istqb, istqb foundation, ctfl, istqb ctfl]
+    country: INTL
+    source_id: SRC-INTL-ISTQB
+    url: https://www.istqb.org/certifications/certified-tester-foundation-level
+    last_checked: 2026-10-24
+    exam_prep: true
+    applies_to: [software testing, testing, qa, quality assurance, test automation, tester]
+    departments: [Software]
+    competencies:
+      - {id: CTFL-1, kind: topic, name: Fundamentals of testing,
+         description: "What testing is, why it is necessary, the testing principles, test activities and roles",
+         keywords: [fundamentals of testing, testing principles, test process, test activities, why testing, "مبادئ الاختبار"]}
+      - {id: CTFL-2, kind: topic, name: Testing throughout the software development lifecycle,
+         description: "Testing in SDLC models, test levels and test types, confirmation and regression testing, maintenance testing",
+         keywords: [software development lifecycle, sdlc, test levels, test types, regression testing, maintenance testing, shift-left]}
+      - {id: CTFL-3, kind: topic, name: Static testing,
+         description: "Static testing basics, work products that can be reviewed, the review process and review types",
+         keywords: [static testing, static analysis, review process, code review, reviews]}
+      - {id: CTFL-4, kind: topic, name: Test analysis and design,
+         description: "Black-box, white-box and experience-based test techniques; collaboration-based test approaches",
+         keywords: [test design, test techniques, equivalence partitioning, boundary value, decision table, state transition, black-box, white-box, exploratory testing]}
+      - {id: CTFL-5, kind: topic, name: Managing the test activities,
+         description: "Test planning, risk management, test monitoring and control, configuration and defect management",
+         keywords: [test planning, test management, risk-based testing, test monitoring, defect management, defect report, bug report, test estimation]}
+      - {id: CTFL-6, kind: topic, name: Test tools,
+         description: "Tool support for testing, benefits and risks of test automation",
+         keywords: [test tools, test automation, automation framework, selenium, playwright, cypress, tool support]}
+
+  - framework_id: AWS-CLF-C02
+    name: AWS Certified Cloud Practitioner (CLF-C02) exam guide
+    short_name: AWS Cloud Practitioner
+    aliases: [aws cloud practitioner, clf-c02, aws ccp, cloud practitioner]
+    country: INTL
+    source_id: SRC-INTL-AWS-CCP
+    url: https://aws.amazon.com/certification/certified-cloud-practitioner/
+    last_checked: 2026-10-24
+    exam_prep: true
+    applies_to: [aws, cloud practitioner, cloud computing, amazon web services]
+    departments: [Cloud]
+    competencies:
+      - {id: CLF-D1, kind: topic, name: Cloud concepts,
+         description: "Benefits of the AWS Cloud, design principles of the Well-Architected Framework, migration and cloud economics",
+         keywords: [cloud concepts, benefits of cloud, well-architected, cloud economics, cloud adoption framework, migration to the cloud]}
+      - {id: CLF-D2, kind: topic, name: Security and compliance,
+         description: "The shared responsibility model, security and compliance concepts, access management (IAM)",
+         keywords: [shared responsibility, iam, identity and access management, security and compliance, compliance, encryption]}
+      - {id: CLF-D3, kind: topic, name: Cloud technology and services,
+         description: "Deployment methods, global infrastructure, compute, database, network, storage, AI/ML and analytics services",
+         keywords: [ec2, s3, compute services, storage services, database services, networking, vpc, global infrastructure, lambda]}
+      - {id: CLF-D4, kind: topic, name: Billing, pricing and support,
+         description: "Pricing models, billing and cost management tools, support plans and resources",
+         keywords: [pricing, billing, cost management, support plans, pricing calculator, cost explorer]}
+
+  - framework_id: PMI-PMP-ECO-2021
+    name: PMI Project Management Professional (PMP) Examination Content Outline (2021)
+    short_name: PMP ECO
+    aliases: [pmp, pmp eco, project management professional, pmi]
+    country: INTL
+    source_id: SRC-INTL-PMI
+    url: https://www.pmi.org/certifications/project-management-pmp
+    last_checked: 2026-10-24
+    exam_prep: true
+    applies_to: [pmp, project management, project manager, "إدارة المشاريع"]
+    departments: [Business]
+    competencies:
+      - {id: PMP-PEOPLE, kind: topic, name: "People domain: leading and supporting the team",
+         description: "Leadership, conflict, team performance, stakeholder engagement, virtual teams, mentoring",
+         keywords: [people domain, team leadership, leading a team, conflict management, stakeholder engagement, servant leadership, team building,
+                    "قيادة الفريق", "إدارة النزاعات", "أصحاب المصلحة", "القيادة الخادمة"]}
+      - {id: PMP-PROCESS, kind: topic, name: "Process domain: managing the project",
+         description: "Scope, schedule, budget, quality, risk, procurement, communications and integration with predictive, agile and hybrid approaches",
+         keywords: [process domain, scope management, schedule management, budget, cost management, risk management, quality management, procurement, integration management,
+                    "إدارة النطاق", "الجدول الزمني", "الميزانية", "إدارة المخاطر", "إدارة الجودة", "المشتريات"]}
+      - {id: PMP-AGILE, kind: topic, name: Agile and hybrid approaches,
+         description: "About half of the exam covers agile or hybrid approaches",
+         keywords: [agile, hybrid approach, scrum, kanban, iterative, "الرشيقة", "سكرم", "كانبان", "الهجينة"]}
+      - {id: PMP-BUSINESS, kind: topic, name: "Business environment domain",
+         description: "Compliance, benefits and value delivery, external business environment, organizational change",
+         keywords: [business environment, benefits realization, value delivery, organizational change, compliance, governance,
+                    "بيئة الأعمال", "تحقيق القيمة", "التغيير المؤسسي", "الامتثال"]}
+
+  - framework_id: SFIA-9
+    name: SFIA 9 — Skills Framework for the Information Age (selected skills)
+    short_name: SFIA 9
+    aliases: [sfia, sfia 9, sfia9, skills framework for the information age]
+    country: INTL
+    source_id: SRC-INTL-SFIA
+    url: https://sfia-online.org/
+    last_checked: 2026-10-24
+    filter_by_department: true
+    applies_to: [it skills, digital skills, software, data, cloud, cybersecurity, ai]
+    departments: [AI, Data, Software, Cloud, Cybersecurity]
+    note: Only skills relevant to the academy's departments; skill codes to be confirmed against SFIA 9.
+    competencies:
+      - {id: SFIA-PROG, kind: topic, name: Programming / software development, departments: [Software, AI, Data],
+         description: "Designing, coding, verifying, testing, documenting and maintaining software",
+         keywords: [programming, software development, coding, python, javascript, version control, git]}
+      - {id: SFIA-SWDN, kind: topic, name: Software design, departments: [Software],
+         description: "Specifying and designing software to meet defined requirements",
+         keywords: [software design, architecture, design patterns, api design, system design]}
+      - {id: SFIA-TEST, kind: topic, name: Functional testing, departments: [Software],
+         description: "Assessing specified or unspecified functional requirements and characteristics through testing",
+         keywords: [testing, unit testing, test cases, quality assurance, automated tests]}
+      - {id: SFIA-DATS, kind: topic, name: Data science, departments: [Data, AI],
+         description: "Applying mathematics, statistics, data mining and predictive modelling to gain insight from data",
+         keywords: [data science, statistics, exploratory data analysis, data analysis, predictive modelling, pandas]}
+      - {id: SFIA-VISL, kind: topic, name: Data visualisation, departments: [Data],
+         description: "Facilitating understanding of data by displaying concepts, ideas and facts graphically",
+         keywords: [data visualisation, data visualization, dashboards, power bi, charts, tableau]}
+      - {id: SFIA-MLNG, kind: topic, name: Machine learning, departments: [AI, Data],
+         description: "Developing systems that learn through experience and by the use of data",
+         keywords: [machine learning, model training, model evaluation, supervised learning, deep learning, neural networks]}
+      - {id: SFIA-DENG, kind: topic, name: Data engineering, departments: [Data, AI],
+         description: "Designing, building, operationalising, securing and monitoring data pipelines and stores",
+         keywords: [data engineering, data pipelines, etl, sql, data warehouse, mlops]}
+      - {id: SFIA-SCTY, kind: topic, name: Information security, departments: [Cybersecurity, Cloud],
+         description: "Defining and operating a framework of security controls and security management strategies",
+         keywords: [information security, security controls, risk assessment, security policy, iso 27001, access control]}
+      - {id: SFIA-PENT, kind: topic, name: Penetration testing, departments: [Cybersecurity],
+         description: "Testing the effectiveness of security controls by emulating the tools and techniques of likely attackers",
+         keywords: [penetration testing, ethical hacking, vulnerability assessment, exploitation, kali]}
+      - {id: SFIA-RELM, kind: topic, name: Release and deployment, departments: [Cloud, Software],
+         description: "Applying the processes, systems and functions required to make new and changed services available",
+         keywords: [deployment, ci/cd, continuous integration, release management, docker, kubernetes]}
+      - {id: SFIA-ETHICS, kind: outcome, name: Professional and ethical practice, departments: [AI, Data, Software, Cloud, Cybersecurity],
+         description: "Working ethically, securely and responsibly as an IT professional (SFIA generic attributes)",
+         keywords: [ethical, ethically, responsible, responsibly, professional, privacy, "أخلاقي", "بمسؤولية"]}
+
+  - framework_id: EG-NAQAAE-PS
+    name: NAQAAE program specification requirements (Egypt) — design checklist
+    short_name: NAQAAE program specification
+    aliases: [naqaae, egypt accreditation, national authority for quality assurance, الهيئة القومية لضمان جودة التعليم والاعتماد]
+    country: EG
+    source_id: SRC-EG-NAQAAE
+    url: https://naqaae.eg/en/higher_education/publications_templates
+    last_checked: 2026-10-24
+    applies_to: [egypt]
+    note: Team checklist derived from the program/course specification template (aims, intended learning outcomes
+          in four categories, teaching and assessment methods). Verify against the current NAQAAE template.
+    competencies:
+      - {id: NAQ-AIMS, kind: structure, check: has_objectives, name: Program aims / objectives are stated}
+      - {id: NAQ-ILO-K, kind: structure, check: "outcome_domain:knowledge", name: "ILOs: knowledge and understanding"}
+      - {id: NAQ-ILO-I, kind: structure, check: "outcome_domain:intellectual", name: "ILOs: intellectual skills"}
+      - {id: NAQ-ILO-P, kind: structure, check: "outcome_domain:practical", name: "ILOs: professional and practical skills"}
+      - {id: NAQ-ILO-G, kind: structure, check: "outcome_domain:transferable", name: "ILOs: general and transferable skills"}
+      - {id: NAQ-TL, kind: structure, check: has_practical_work, name: Teaching and learning methods include practical work}
+      - {id: NAQ-ASSESS, kind: structure, check: assessments_complete, name: Assessment methods with weights that total 100%}
+      - {id: NAQ-STRUCT, kind: structure, check: hours_consistent, name: Course structure with contact hours per module}
+      - {id: NAQ-PREREQ, kind: structure, check: has_prerequisites, name: Prerequisites / admission requirements stated}
+
+  - framework_id: SA-NQF-DOMAINS
+    name: Saudi National Qualifications Framework (NQF-KSA) learning domains — design checklist
+    short_name: NQF-KSA learning domains
+    aliases: [nqf-ksa, saudi nqf, ncaaa, nctea, etec, saudi accreditation, الإطار الوطني للمؤهلات]
+    country: SA
+    source_id: SRC-SA-ETEC-NCAAA
+    url: https://etec.gov.sa/en/service/Program%20Accreditation/servicedocuments
+    last_checked: 2026-10-24
+    applies_to: [saudi arabia]
+    note: Team checklist using the three NQF-KSA learning-outcome domains plus basic training-program design items.
+          Training-provider accreditation in Saudi Arabia is handled by ETEC/NCTEA and TVTC; verify current requirements.
+    competencies:
+      - {id: NQF-K, kind: structure, check: "outcome_domain:knowledge", name: "Learning outcomes: knowledge and understanding"}
+      - {id: NQF-S, kind: structure, check: "outcome_domain:practical", name: "Learning outcomes: skills"}
+      - {id: NQF-V, kind: structure, check: "outcome_domain:transferable", name: "Learning outcomes: values, autonomy and responsibility"}
+      - {id: NQF-OBJ, kind: structure, check: has_objectives, name: Training objectives are stated}
+      - {id: NQF-ASSESS, kind: structure, check: assessments_complete, name: Assessment plan with weights that total 100%}
+      - {id: NQF-ALIGN, kind: structure, check: outcomes_assessed, name: Every learning outcome is assessed}
+      - {id: NQF-HOURS, kind: structure, check: hours_consistent, name: Training hours declared and consistent}
+
+  - framework_id: REX-QUALITY
+    name: Academy curriculum quality baseline
+    short_name: Academy quality baseline
+    aliases: [baseline, academy baseline, quality baseline]
+    country: INTL
+    source_id: SRC-ACAD-QUALITY
+    last_checked: 2026-10-24
+    applies_to: []
+    note: Internal instructional-design checklist applied to every curriculum (sample - to be approved by the academy).
+    competencies:
+      - {id: Q-OBJ, kind: structure, check: has_objectives, name: Course objectives stated}
+      - {id: Q-AUD, kind: structure, check: has_audience, name: Target audience stated}
+      - {id: Q-PRE, kind: structure, check: has_prerequisites, name: Prerequisites stated}
+      - {id: Q-MEAS, kind: structure, check: outcomes_measurable, name: Learning outcomes use measurable action verbs}
+      - {id: Q-REQ, kind: structure, check: requested_outcomes_covered, name: Every outcome requested by the course owner is included}
+      - {id: Q-HOURS, kind: structure, check: hours_consistent, name: Module hours add up to the training hours}
+      - {id: Q-PRAC, kind: structure, check: every_module_practical, name: Every module has a practical exercise}
+      - {id: Q-ASSESS, kind: structure, check: assessments_complete, name: Assessment weights total 100%}
+      - {id: Q-ALIGN, kind: structure, check: outcomes_assessed, name: Outcomes are assessed}
+      - {id: Q-CAP, kind: structure, check: has_capstone, name: Capstone project defined}

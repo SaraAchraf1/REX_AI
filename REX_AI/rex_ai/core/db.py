@@ -300,3 +300,145 @@ def list_rfp_alerts(limit: int = 50, db_path: Optional[Path] = None) -> list[dic
     with connect(db_path) as conn:
         rows = conn.execute("SELECT * FROM rfp_alerts ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,))
         return [{**dict(r), "channels": json.loads(r["channels"])} for r in rows]
+
+
+# --------------------------------------------------------------------------- #
+# Curriculum and accreditation alignment (owner: Member 2)
+# --------------------------------------------------------------------------- #
+def save_standards(rows: list[dict], db_path: Optional[Path] = None) -> None:
+    """Framework competencies -> accreditation_standards (idempotent)."""
+    with connect(db_path) as conn:
+        conn.executemany("INSERT OR REPLACE INTO accreditation_standards VALUES (?,?,?,?,?,?,?)",
+                         [(r["standard_id"], r["framework"], r.get("country"), r["competency"], r.get("description"),
+                           r["source_id"], r.get("last_checked")) for r in rows])
+
+
+def list_standards(framework: Optional[str] = None, db_path: Optional[Path] = None) -> list[dict]:
+    sql, args = "SELECT * FROM accreditation_standards", []
+    if framework:
+        sql, args = sql + " WHERE framework=?", [framework]
+    with connect(db_path) as conn:
+        return [dict(r) for r in conn.execute(sql + " ORDER BY standard_id", args)]
+
+
+def save_curriculum(cur: dict, request: dict, change_note: Optional[str] = None, changed_by: Optional[str] = None,
+                    db_path: Optional[Path] = None) -> None:
+    """Insert or update a curriculum and keep a copy of this version in curriculum_versions."""
+    meta = cur.get("metadata") or {}
+    now = _now()
+    content = json.dumps(cur, ensure_ascii=False, default=str)
+    with connect(db_path) as conn:
+        conn.execute(
+            """INSERT INTO curricula (curriculum_id, course_id, course_title, request, content, department,
+                 target_audience, skill_level, industry, duration_hours, accreditation_framework, country, status,
+                 version, created_at, updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+               ON CONFLICT(curriculum_id) DO UPDATE SET course_title=excluded.course_title, content=excluded.content,
+                 department=excluded.department, target_audience=excluded.target_audience,
+                 skill_level=excluded.skill_level, industry=excluded.industry, duration_hours=excluded.duration_hours,
+                 accreditation_framework=excluded.accreditation_framework, country=excluded.country,
+                 status=excluded.status, version=excluded.version, updated_at=excluded.updated_at""",
+            (cur["curriculum_id"], cur.get("course_id"), cur["course_title"],
+             json.dumps(request, ensure_ascii=False, default=str), content, meta.get("department"),
+             cur.get("target_audience"), meta.get("skill_level"), meta.get("industry"), cur.get("training_hours"),
+             meta.get("accreditation_framework"), meta.get("country"), cur["status"], cur["version"], now, now))
+        conn.execute("INSERT OR REPLACE INTO curriculum_versions VALUES (?,?,?,?,?,?)",
+                     (cur["curriculum_id"], cur["version"], content, change_note, changed_by, now))
+
+
+def _curriculum_row(row: sqlite3.Row) -> dict:
+    r = dict(row)
+    r["content"] = json.loads(r["content"])
+    r["request"] = json.loads(r["request"])
+    return r
+
+
+def get_curriculum(curriculum_id: str, db_path: Optional[Path] = None) -> Optional[dict]:
+    with connect(db_path) as conn:
+        row = conn.execute("SELECT * FROM curricula WHERE curriculum_id=?", (curriculum_id,)).fetchone()
+        return _curriculum_row(row) if row else None
+
+
+def list_curricula(department: Optional[str] = None, skill_level: Optional[str] = None,
+                   country: Optional[str] = None, status: Optional[str] = None, framework: Optional[str] = None,
+                   industry: Optional[str] = None, audience: Optional[str] = None, q: Optional[str] = None,
+                   min_hours: Optional[float] = None, max_hours: Optional[float] = None, limit: int = 200,
+                   db_path: Optional[Path] = None) -> list[dict]:
+    """Metadata filtering (brief: department, audience, level, industry, duration, framework, country) + free text."""
+    sql, args = "SELECT * FROM curricula WHERE 1=1", []
+    for col, val in (("department", department), ("skill_level", skill_level), ("country", country),
+                     ("status", status)):
+        if val:
+            sql += f" AND lower({col})=lower(?)"
+            args.append(val)
+    for col, val in (("accreditation_framework", framework), ("industry", industry), ("target_audience", audience)):
+        if val:
+            sql += f" AND {col} LIKE ?"
+            args.append(f"%{val}%")
+    if min_hours is not None:
+        sql += " AND duration_hours >= ?"
+        args.append(min_hours)
+    if max_hours is not None:
+        sql += " AND duration_hours <= ?"
+        args.append(max_hours)
+    if q:
+        sql += " AND (course_title LIKE ? OR content LIKE ?)"
+        args += [f"%{q}%"] * 2
+    sql += " ORDER BY updated_at DESC, rowid DESC LIMIT ?"
+    args.append(limit)
+    with connect(db_path) as conn:
+        return [_curriculum_row(r) for r in conn.execute(sql, args)]
+
+
+def list_curriculum_versions(curriculum_id: str, db_path: Optional[Path] = None) -> list[dict]:
+    with connect(db_path) as conn:
+        rows = conn.execute("SELECT * FROM curriculum_versions WHERE curriculum_id=? ORDER BY version",
+                            (curriculum_id,))
+        return [{**dict(r), "content": json.loads(r["content"])} for r in rows]
+
+
+def save_gap_report(report: dict, db_path: Optional[Path] = None) -> None:
+    with connect(db_path) as conn:
+        conn.execute("INSERT OR REPLACE INTO gap_reports VALUES (?,?,?,?,?)",
+                     (report["report_id"], report["curriculum_id"], report["framework"],
+                      json.dumps(report, ensure_ascii=False, default=str), _now()))
+
+
+def list_gap_reports(curriculum_id: str, db_path: Optional[Path] = None) -> list[dict]:
+    """Newest first."""
+    with connect(db_path) as conn:
+        rows = conn.execute("SELECT content FROM gap_reports WHERE curriculum_id=? "
+                            "ORDER BY created_at DESC, rowid DESC", (curriculum_id,))
+        return [json.loads(r["content"]) for r in rows]
+
+
+def save_review(object_type: str, object_id: str, action: str, reviewer: str, comment: Optional[str] = None,
+                db_path: Optional[Path] = None) -> None:
+    with connect(db_path) as conn:
+        conn.execute("INSERT INTO reviews (object_type, object_id, action, reviewer, comment, created_at) "
+                     "VALUES (?,?,?,?,?,?)", (object_type, object_id, action, reviewer, comment, _now()))
+
+
+def list_reviews(object_type: str, object_id: str, db_path: Optional[Path] = None) -> list[dict]:
+    with connect(db_path) as conn:
+        rows = conn.execute("SELECT * FROM reviews WHERE object_type=? AND object_id=? ORDER BY review_id",
+                            (object_type, object_id))
+        return [dict(r) for r in rows]
+
+
+def save_handoff(from_agent: str, to_agent: str, payload_type: str, payload_id: str,
+                 db_path: Optional[Path] = None) -> dict:
+    """Agent-to-agent handoff (docs/interfaces.md §4), e.g. approved curriculum -> Document Agent."""
+    event = {"event_id": "EVT-" + uuid.uuid4().hex[:10], "from_agent": from_agent, "to_agent": to_agent,
+             "payload_type": payload_type, "payload_id": payload_id, "created_at": _now()}
+    with connect(db_path) as conn:
+        conn.execute("INSERT INTO handoff_events VALUES (?,?,?,?,?,?)", tuple(event.values()))
+    return event
+
+
+def list_handoffs(payload_id: Optional[str] = None, db_path: Optional[Path] = None) -> list[dict]:
+    sql, args = "SELECT * FROM handoff_events", []
+    if payload_id:
+        sql, args = sql + " WHERE payload_id=?", [payload_id]
+    with connect(db_path) as conn:
+        return [dict(r) for r in conn.execute(sql + " ORDER BY created_at, rowid", args)]
