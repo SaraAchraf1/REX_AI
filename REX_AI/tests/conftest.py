@@ -16,6 +16,7 @@ shutil.copytree(Path(__file__).resolve().parent.parent / "data", _data_copy,
                 ignore=shutil.ignore_patterns("chroma", "raw", "kb", "backup"))
 os.environ["REX_DATA_DIR"] = str(_data_copy)
 os.environ["REX_RFP_DIR"] = str(_data_copy / "rfp")
+os.environ["REX_CURRICULUM_OUTPUT_DIR"] = str(Path(tempfile.mkdtemp()) / "curricula")
 # Fixed "today" so the sample tenders' deadlines give the same results on any date.
 os.environ["REX_RFP_TODAY"] = "2026-10-24"
 os.environ.pop("REX_RFP_WEBHOOK_URL", None)

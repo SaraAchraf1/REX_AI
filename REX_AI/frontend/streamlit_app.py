@@ -15,9 +15,11 @@ import httpx
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from frontend.ui import api, no_fog  # noqa: E402
 from rex_ai import config  # noqa: E402
 
 st.set_page_config(page_title="REX Course Assistant", page_icon="🎓", layout="centered")
+no_fog()
 
 FORMAT = {"online_live": "Live online", "onsite": "On-site", "hybrid": "Hybrid"}
 
@@ -32,7 +34,7 @@ def _local_assistant():
 def upload_data(name: str, content: bytes) -> dict:
     """Course catalogues are merged into the course data; other documents are indexed for answers."""
     if st.session_state.api_mode:
-        r = httpx.post(f"{config.API_URL}/data/upload", files={"file": (name, content)}, timeout=600)
+        r = api().post(f"{config.API_URL}/data/upload", files={"file": (name, content)}, timeout=600)
         if r.status_code != 200:
             raise ValueError(r.json().get("message", r.text))
         return r.json()
@@ -42,7 +44,7 @@ def upload_data(name: str, content: bytes) -> dict:
 
 def api_available() -> bool:
     try:
-        return httpx.get(f"{config.API_URL}/health", timeout=2).status_code == 200
+        return api().get(f"{config.API_URL}/health", timeout=2).status_code == 200
     except httpx.HTTPError:
         return False
 
@@ -52,7 +54,7 @@ def send_chat(message: str, language: str | None) -> dict:
     if language:
         payload["language"] = language
     if st.session_state.api_mode:
-        r = httpx.post(f"{config.API_URL}/chat", json=payload, timeout=60)
+        r = api().post(f"{config.API_URL}/chat", json=payload, timeout=60)
         r.raise_for_status()
         return r.json()
     from rex_ai.core.schemas import ChatRequest
@@ -61,7 +63,7 @@ def send_chat(message: str, language: str | None) -> dict:
 
 def save_lead(payload: dict) -> tuple[bool, str]:
     if st.session_state.api_mode:
-        r = httpx.post(f"{config.API_URL}/leads", json=payload, timeout=10)
+        r = api().post(f"{config.API_URL}/leads", json=payload, timeout=10)
         if r.status_code == 201:
             return True, r.json()["lead_id"]
         detail = r.json().get("details", {}).get("errors", [{}])

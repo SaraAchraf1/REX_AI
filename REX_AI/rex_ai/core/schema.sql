@@ -198,6 +198,18 @@ CREATE TABLE IF NOT EXISTS curricula (
     updated_at      TEXT NOT NULL
 );
 
+-- Every saved version of a curriculum (generation, reviewer revisions) - nothing is overwritten
+CREATE TABLE IF NOT EXISTS curriculum_versions (
+    curriculum_id  TEXT NOT NULL REFERENCES curricula(curriculum_id) ON DELETE CASCADE,
+    version        INTEGER NOT NULL,
+    content        TEXT NOT NULL,                   -- JSON Curriculum
+    change_note    TEXT,
+    changed_by     TEXT,
+    created_at     TEXT NOT NULL,
+    PRIMARY KEY (curriculum_id, version)
+);
+CREATE INDEX IF NOT EXISTS idx_curricula_filters ON curricula(department, skill_level, country, status);
+
 CREATE TABLE IF NOT EXISTS gap_reports (
     report_id      TEXT PRIMARY KEY,
     curriculum_id  TEXT NOT NULL REFERENCES curricula(curriculum_id) ON DELETE CASCADE,

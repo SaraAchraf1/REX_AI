@@ -7,7 +7,7 @@ specialized agents behind one orchestrator:
 | --- | --- | --- | --- |
 | 1 | REX Course Assistant (recommendation chatbot) | Member 1 | **Sprint 1 prototype working** |
 | 2 | Tender / RFP Research (Egypt + Saudi Arabia only) | Member 2 | **Sprint 2 working** (see below) |
-| 3 | Curriculum & Accreditation Alignment | Member 2 | Contract defined, Sprint 2 |
+| 3 | Curriculum & Accreditation Alignment | Member 2 | **Sprint 2 working** (see below) |
 | 4 | Document Generation (PDF) | Member 3 | Contract defined, Sprint 2 |
 | 5 | AI Marketing | Member 1 | Contract defined, Sprint 2 |
 | — | Orchestrator, API, app shell, integration | Member 3 | Keyword router + API live |
@@ -48,6 +48,7 @@ dates still come only from the data files. Without a key REX uses its determinis
 
 ```
 data/                       sample academy data + data_sources.yaml (all approved/candidate sources)
+  curriculum/               frameworks, industry skills and reference syllabi for the Curriculum Agent
   courses.json  instructors.json  pricing_promotions.json  schedules.json  faqs.json  admission_requirements.json
 docs/interfaces.md          data model, endpoints, agent handoff contract  <- read before coding
 rex_ai/
@@ -56,8 +57,11 @@ rex_ai/
   core/schema.sql           database schema (SQLite now, PostgreSQL-compatible)
   core/db.py                persistence helpers, seeding, logging
   agents/rex/               REX Assistant: knowledge base, retriever, profile extractor, recommender, LLM, prompts
+  agents/rfp/               RFP & Tender Research Agent
+  agents/curriculum/        Curriculum & Accreditation Alignment Agent
   api/main.py               FastAPI app (+ orchestrator stub)
 frontend/streamlit_app.py   chat UI
+frontend/pages/              RFP Research and Curriculum pages of the same app
 scripts/build_kb.py         validates data, writes data/kb/kb_chunks.jsonl for a vector store
 tests/                      knowledge base, recommender and API tests
 ```
@@ -172,3 +176,60 @@ USA, Kenya, Jordan), 2 are not training (air conditioning, catering), 1 is expir
 (including a tender document that matches a feed notice), leaving 10. Replace it with real portal exports:
 drop a CSV/Excel export (Arabic column names such as `اسم المنافسة`, `الجهة`, `آخر موعد لتقديم العروض` are
 understood) into `data/rfp/feeds/`, or upload it with `POST /rfp/upload`.
+
+## Agent 3 — Curriculum Research & Accreditation Alignment (Sprint 2)
+
+Designs a structured curriculum from the discovery answers, checks it against accreditation / competency
+frameworks, exports a PDF and takes it through review. Code: `rex_ai/agents/curriculum/`, UI: the **Curriculum**
+page of the Streamlit app. Works without an LLM; with `OPENAI_API_KEY` set, the LLM refines the rule-based draft
+and the same checks are applied to its output.
+
+```
+discovery answers ──> research ─────────────────────────────> curriculum ──> finalize ──> alignment reports ──> draft v1
+ (or a catalogue      catalogue courses · reference syllabi      (modules,     hours, weights,  framework + country
+  course id)          (RAG, curriculum_refs, metadata filters)    outcomes...)  requested items, checklist + academy
+                      industry skills · framework                               no accreditation baseline
+                                                                                claims
+review: submit ──> approved (HandoffEvent curriculum → document) | changes_requested ──> revise ──> v2 (draft, re-aligned)
+```
+
+| Brief requirement | Where |
+| --- | --- |
+| FR 18 Research with approved, credible sources | `research.py`: catalogue courses, reference syllabi in `data/curriculum/references/` indexed in the shared RAG collection `curriculum_refs` (with the MIT OCW notes), framework summaries; every source is listed in `Curriculum.sources` and registered in `data_sources.yaml` |
+| FR 19 Industry skill requirements | `data/curriculum/industry_skills.yaml` (roles, skills, tools per department; sample from EG/SA job postings, ESCO/O*NET to verify) |
+| FR 20-21 Structured curriculum: objectives, audience, prerequisites, outcomes, modules & topics, hours, exercises, assessments, capstone | `generator.py`: modules from the catalogue course or the best reference syllabus (plus a second one for cross-domain titles), hours always add up, weights total 100%, outcomes cover the knowledge / intellectual / practical / transferable domains |
+| FR 22 Compare with accreditation or competency standards | `alignment.py` + `data/curriculum/frameworks.yaml`: ISTQB CTFL, AWS CLF-C02, PMP ECO, SFIA 9 (by department), Egypt NAQAAE program-specification checklist, Saudi NQF-KSA domains, academy quality baseline |
+| FR 23 Missing topics / outcomes | each competency is covered (keyword evidence), partial (semantic match, reviewer confirms) or missing; `GapReport.missing_topics`, `missing_outcomes`, `recommendations` |
+| FR 24 Professional PDF | `pdf.py` (reportlab): metadata table, outcomes, module table, assessment plan, capstone, alignment report, sources, review history; Arabic shaped right-to-left; DRAFT watermark until approved |
+| FR 25 Review and modifications before approval | `POST /curriculum/{id}/review` and `/revise`: plain-language instructions ("add module ...", "remove topic ...", "add outcome: ...", "set hours to 48") or edited fields → new version; nothing is overwritten (`curriculum_versions`) |
+| Metadata table (department, audience, level, industry, duration, outcomes, prerequisites, framework, country, source & update date) | stored in `Curriculum.metadata` and the `curricula` columns; `GET /curriculum?department=&skill_level=&country=&framework=&industry=&audience=&min_hours=&max_hours=&q=`; reference chunks carry the same fields as RAG metadata |
+| Never claim accreditation | `generator.guard_claims` rewrites "accredited / certified by ..." in any generated, imported or edited text; every report carries the disclaimer; frameworks are labelled "alignment only" |
+| Use stored information instead of asking again | `course_id` fills title, audience, level, hours, outcomes from the catalogue; the chat router asks only the missing discovery questions |
+
+```bash
+python scripts/run_curriculum.py --title "Data Analysis for Healthcare Quality" --audience "Hospital quality officers" \
+    --level Beginner --hours 40 --industry Healthcare --outcome "Build a KPI dashboard for patient safety" --pdf
+python scripts/run_curriculum.py --import-course SW-201 --framework ISTQB     # gap analysis of an existing course
+python scripts/run_curriculum.py --title "إدارة المشاريع الاحترافية" --audience "مديرو المشاريع" \
+    --level Intermediate --hours 35 --language ar --country SA --pdf       # Arabic curriculum + PDF
+python scripts/run_curriculum.py --revise CUR-XXXX --reviewer "Dr. Mona" --instructions "add module Power BI; set hours to 48"
+python scripts/run_curriculum.py --approve CUR-XXXX --reviewer Dean
+pytest -q tests/test_curriculum_agent.py                                     # 52 test cases
+```
+
+Endpoints: `GET /curriculum/frameworks`, `POST /curriculum/research` (preview), `POST /curriculum`,
+`POST /curriculum/import` (catalogue course or an instructor's proposal), `GET /curriculum` (metadata filters),
+`GET /curriculum/{id}`, `POST /curriculum/{id}/gap-report`, `GET /curriculum/{id}/gap-reports`,
+`POST /curriculum/{id}/review`, `POST /curriculum/{id}/revise`, `GET /curriculum/{id}/history`,
+`GET /curriculum/{id}/pdf`. `POST /route` sends "design a curriculum for ..." messages here.
+
+**Real model + LLM:** settings are read from `.env` (copy `.env.example`). Set `OPENAI_API_KEY` and
+`REX_RAG_EMBEDDINGS=sentence-transformers` (multilingual-e5-small, Arabic + English). A `curriculum_refs` collection
+built earlier with another embedder is rebuilt automatically (re-run `scripts/ingest_mit_ocw.py` for the MIT notes).
+With e5 the alignment relies on keyword and shared-word evidence; an embedding match alone counts only when it
+clearly stands out (score ≥ 0.85 and ≥ 0.045 above that competency's average), because e5 scores every pair 0.79-0.87.
+
+Framework summaries, reference syllabi and industry skills are team-made (`sample` / `to_verify` in
+`data_sources.yaml`): check them against the official documents and add the academy's own references to
+`data/curriculum/references/` (with a line in `manifest.yaml`) before real use. PDFs need a TTF font with Arabic
+glyphs; Arial/Tahoma (Windows), DejaVu Sans or Noto Naskh (Linux) are found automatically, or set `REX_PDF_FONT`.

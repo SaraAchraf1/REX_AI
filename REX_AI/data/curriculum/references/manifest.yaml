@@ -1,0 +1,73 @@
+# Metadata for the curriculum reference documents in this folder (brief, Agent 3 "Data Sources & Metadata").
+# Every file is ingested into the shared RAG collection "curriculum_refs" with these fields, so the Curriculum
+# Agent can filter references by department, level, audience, industry, framework and country, and cite them.
+# Files dropped here without an entry are ingested with the defaults below.
+#
+# Fields: department, target_audience, skill_level, industry, duration_hours, prerequisites,
+#         accreditation_framework, country, source_id, update_date (data source & update date)
+
+defaults:
+  source_id: SRC-CUR-REFS
+  country: INTL
+  update_date: 2026-10-24
+
+files:
+  data_analysis_reference_syllabus.md:
+    department: Data
+    target_audience: Graduates and business professionals moving into data roles
+    skill_level: Beginner
+    industry: [Finance, Retail, Telecom, Government]
+    duration_hours: 48
+    prerequisites: Basic Excel and computer skills
+    accreditation_framework: SFIA 9
+    country: [EG, SA]
+  software_testing_reference_syllabus.md:
+    department: Software
+    target_audience: Developers and QA staff preparing for ISTQB Foundation
+    skill_level: Intermediate
+    industry: [Technology, Banking]
+    duration_hours: 40
+    prerequisites: Basic software development knowledge
+    accreditation_framework: ISTQB Foundation
+  cybersecurity_fundamentals_reference.md:
+    department: Cybersecurity
+    target_audience: IT staff and graduates starting in security operations
+    skill_level: Beginner
+    industry: [Banking, Government, Telecom]
+    duration_hours: 40
+    prerequisites: Basic networking knowledge
+    accreditation_framework: SFIA 9
+    country: [EG, SA]
+  generative_ai_llm_reference.md:
+    department: AI
+    target_audience: Developers building AI-powered applications
+    skill_level: Intermediate
+    industry: [Technology, Finance]
+    duration_hours: 36
+    prerequisites: Python programming
+    accreditation_framework: SFIA 9
+  cloud_devops_reference.md:
+    department: Cloud
+    target_audience: IT professionals moving to cloud and DevOps roles
+    skill_level: Intermediate
+    industry: [Technology, Telecom, Banking]
+    duration_hours: 48
+    prerequisites: Linux and networking basics
+    accreditation_framework: AWS Cloud Practitioner
+  healthcare_quality_patient_safety_reference.md:
+    department: Healthcare
+    target_audience: Nurses, quality officers and healthcare administrators
+    skill_level: Beginner
+    industry: [Healthcare]
+    duration_hours: 30
+    prerequisites: Work experience in a healthcare setting
+    country: [EG, SA]
+  project_management_reference_ar.md:
+    department: Business
+    target_audience: Project managers and team leads
+    skill_level: Intermediate
+    industry: [Construction, Technology, Government]
+    duration_hours: 35
+    prerequisites: Project experience
+    accreditation_framework: PMP ECO
+    country: [EG, SA]

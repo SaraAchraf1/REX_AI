@@ -10,9 +10,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import Body, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 
 from rex_ai import config
+from rex_ai.agents.curriculum.agent import CurriculumAgent, NotFound
 from rex_ai.agents.rex.assistant import RexAssistant
 from rex_ai.agents.rex.knowledge_base import get_kb
 from rex_ai.agents.rex.text_utils import contains_any
@@ -20,10 +21,12 @@ from rex_ai.agents.rfp import sources as rfp_sources
 from rex_ai.agents.rfp.agent import RFPResearchAgent, row_to_record
 from rex_ai.agents.rfp.taxonomy import COUNTRY_PLACES
 from rex_ai.core import data_sync, db
-from rex_ai.core.schemas import (AgentName, ChatRequest, ChatResponse, Country, Course, ErrorResponse, Lead,
-                                 LeadCreate, RAGHit, RAGSearchRequest, RAGSearchResponse, RFPAlert, RFPAskRequest,
+from rex_ai.core.schemas import (AgentName, ApprovalStatus, ChatRequest, ChatResponse, Country, Course, Curriculum,
+                                 CurriculumImport, CurriculumRequest, CurriculumResearch, CurriculumRevision,
+                                 ErrorResponse, FrameworkInfo, GapReport, GapReportRequest, Lead, LeadCreate, RAGHit,
+                                 RAGSearchRequest, RAGSearchResponse, ReviewAction, RFPAlert, RFPAskRequest,
                                  RFPAskResponse, RFPCategory, RFPRecord, RFPRunRequest, RFPRunResult, RFPStatus,
-                                 RFPStatusUpdate, RouteRequest, RouteResponse)
+                                 RFPStatusUpdate, RouteRequest, RouteResponse, SkillLevel)
 
 log = logging.getLogger("rex.api")
 
@@ -260,6 +263,146 @@ def rfp_set_status(rfp_id: str, update: RFPStatusUpdate) -> RFPRecord:
     return rfp_get(rfp_id)
 
 
+# ------------------------------------------------------------ Curriculum & Accreditation Alignment (Agent 3)
+def curriculum_agent() -> CurriculumAgent:
+    rex()                                # DB initialised, catalogue loaded
+    return CurriculumAgent()
+
+
+def _error(status: int, code: str, message: str) -> JSONResponse:
+    return JSONResponse(status_code=status, content=ErrorResponse(code=code, message=message).model_dump())
+
+
+@app.get("/curriculum/frameworks", response_model=list[FrameworkInfo], tags=["Curriculum"])
+def curriculum_frameworks() -> list[FrameworkInfo]:
+    """Accreditation / competency frameworks available for alignment (team summaries, status to_verify)."""
+    return CurriculumAgent.frameworks()
+
+
+@app.post("/curriculum/research", response_model=CurriculumResearch, tags=["Curriculum"],
+          responses={404: {"model": ErrorResponse}})
+def curriculum_research(req: CurriculumRequest):
+    """Preview what the agent found for a request: department, framework, related courses, industry skills and
+    reference syllabus modules (RAG over curriculum_refs), with sources. Nothing is stored."""
+    try:
+        return curriculum_agent().research(req)
+    except NotFound as exc:
+        return _error(404, "not_found", str(exc))
+
+
+@app.post("/curriculum", response_model=Curriculum, status_code=201, tags=["Curriculum"],
+          responses={404: {"model": ErrorResponse}})
+def curriculum_generate(req: CurriculumRequest):
+    """Research and generate a structured curriculum (objectives, audience, prerequisites, outcomes, modules,
+    hours, exercises, assessments, capstone), check it against the framework, the country checklist and the
+    academy baseline, and store it as a draft for review."""
+    try:
+        return curriculum_agent().generate(req)
+    except NotFound as exc:
+        return _error(404, "not_found", str(exc))
+
+
+@app.post("/curriculum/import", response_model=Curriculum, status_code=201, tags=["Curriculum"],
+          responses={404: {"model": ErrorResponse}})
+def curriculum_import(req: CurriculumImport):
+    """Bring in an existing catalogue course or an instructor's proposed curriculum to compare it with a framework."""
+    try:
+        return curriculum_agent().import_curriculum(req)
+    except NotFound as exc:
+        return _error(404, "not_found", str(exc))
+
+
+@app.get("/curriculum", response_model=list[Curriculum], tags=["Curriculum"])
+def curriculum_list(department: str | None = None, skill_level: SkillLevel | None = None,
+                    country: Country | None = None, status: ApprovalStatus | None = None,
+                    framework: str | None = None, industry: str | None = None, audience: str | None = None,
+                    min_hours: float | None = None, max_hours: float | None = None,
+                    q: str | None = None) -> list[Curriculum]:
+    """Metadata filtering: department, skill level, country, status, framework, industry, audience, duration range,
+    plus free text over the title and content."""
+    return curriculum_agent().search(department=department, skill_level=skill_level and skill_level.value,
+                                     country=country and country.value, status=status and status.value,
+                                     framework=framework, industry=industry, audience=audience,
+                                     min_hours=min_hours, max_hours=max_hours, q=q)
+
+
+@app.get("/curriculum/{curriculum_id}", response_model=Curriculum, tags=["Curriculum"],
+         responses={404: {"model": ErrorResponse}})
+def curriculum_get(curriculum_id: str):
+    try:
+        return curriculum_agent().get(curriculum_id)
+    except NotFound as exc:
+        return _error(404, "not_found", str(exc))
+
+
+@app.post("/curriculum/{curriculum_id}/gap-report", response_model=GapReport, tags=["Curriculum"],
+          responses={404: {"model": ErrorResponse}})
+def curriculum_gap_report(curriculum_id: str, req: GapReportRequest = Body(default_factory=GapReportRequest)):
+    """Compare the curriculum with a framework: covered / partial / missing competencies with evidence, missing
+    topics and outcomes, coverage % and recommendations. Alignment only - never evidence of accreditation."""
+    try:
+        return curriculum_agent().gap_report(curriculum_id, req.framework)
+    except NotFound as exc:
+        return _error(404, "not_found", str(exc))
+
+
+@app.get("/curriculum/{curriculum_id}/gap-reports", response_model=list[GapReport], tags=["Curriculum"],
+         responses={404: {"model": ErrorResponse}})
+def curriculum_gap_reports(curriculum_id: str):
+    """Latest report per framework (the curriculum's framework first)."""
+    try:
+        return curriculum_agent().gap_reports(curriculum_id)
+    except NotFound as exc:
+        return _error(404, "not_found", str(exc))
+
+
+@app.post("/curriculum/{curriculum_id}/review", response_model=Curriculum, tags=["Curriculum"],
+          responses={404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}})
+def curriculum_review(curriculum_id: str, action: ReviewAction):
+    """pending_approval = submit for review; approved (hands off to the Document Agent), changes_requested or
+    rejected = the reviewer's decision."""
+    try:
+        return curriculum_agent().review(curriculum_id, action)
+    except NotFound as exc:
+        return _error(404, "not_found", str(exc))
+    except ValueError as exc:
+        return _error(409, "invalid_transition", str(exc))
+
+
+@app.post("/curriculum/{curriculum_id}/revise", response_model=Curriculum, tags=["Curriculum"],
+          responses={404: {"model": ErrorResponse}, 400: {"model": ErrorResponse}})
+def curriculum_revise(curriculum_id: str, rev: CurriculumRevision):
+    """Apply a reviewer's modification request (instructions such as "add module Power BI", "remove topic X",
+    "add outcome: ...", "set hours to 48", or edited fields). Creates a new version in draft and re-checks alignment.
+    metadata.last_revision lists what was applied and what was not."""
+    try:
+        return curriculum_agent().revise(curriculum_id, rev)
+    except NotFound as exc:
+        return _error(404, "not_found", str(exc))
+    except ValueError as exc:
+        return _error(400, "invalid_revision", str(exc))
+
+
+@app.get("/curriculum/{curriculum_id}/history", tags=["Curriculum"], responses={404: {"model": ErrorResponse}})
+def curriculum_history(curriculum_id: str):
+    """Versions, review decisions, alignment reports and agent handoffs."""
+    try:
+        return curriculum_agent().history(curriculum_id)
+    except NotFound as exc:
+        return _error(404, "not_found", str(exc))
+
+
+@app.get("/curriculum/{curriculum_id}/pdf", tags=["Curriculum"], response_class=FileResponse,
+         responses={404: {"model": ErrorResponse}})
+def curriculum_pdf(curriculum_id: str, include_alignment: bool = True):
+    """Professional PDF (English or Arabic) with the alignment report; marked DRAFT until approved."""
+    try:
+        path = curriculum_agent().export_pdf(curriculum_id, include_alignment)
+    except NotFound as exc:
+        return _error(404, "not_found", str(exc))
+    return FileResponse(path, media_type="application/pdf", filename=path.name)
+
+
 # ---------------------------------------------------------- Orchestrator
 ROUTING_HINTS = {
     AgentName.rfp_research: ["tender", "rfp", "rfq", "مناقصه", "مناقصة", "مناقصات", "منافسة", "منافسات"],
@@ -277,11 +420,73 @@ def route(req: RouteRequest) -> RouteResponse:
         if any(h in text for h in hints):
             if agent == AgentName.rfp_research:
                 return RouteResponse(agent=agent, intent="rfp_search", confidence=0.7, result=route_rfp(req.message))
+            if agent == AgentName.curriculum:
+                return RouteResponse(agent=agent, intent="curriculum_design", confidence=0.7,
+                                     result=route_curriculum(req.message))
             return RouteResponse(agent=agent, intent=agent.value, confidence=0.6,
                                  result={"status": "not_implemented", "available_in": "Sprint 2"})
     resp = rex().handle(ChatRequest(session_id=req.session_id, message=req.message))
     return RouteResponse(agent=AgentName.rex_assistant, intent=resp.intent, confidence=0.8,
                          result=resp.model_dump(mode="json"))
+
+CURRICULUM_QUESTIONS = {
+    "course_title": "What course would you like to create?",
+    "target_audience": "Who is the target audience?",
+    "skill_level": "What is the intended skill level (beginner, intermediate, advanced)?",
+    "total_hours": "How many training hours are available?",
+}
+CURRICULUM_QUESTIONS_AR = {
+    "course_title": "ما الدورة التي تريد تصميم منهجها؟",
+    "target_audience": "من هي الفئة المستهدفة؟",
+    "skill_level": "ما المستوى المطلوب (مبتدئ، متوسط، متقدم)؟",
+    "total_hours": "كم عدد ساعات التدريب المتاحة؟",
+}
+
+
+def parse_curriculum_message(message: str) -> dict:
+    """'Design a curriculum for Power BI for finance staff, beginner, 30 hours, ISTQB' -> request fields."""
+    import re
+    from rex_ai.agents.curriculum.frameworks import load_frameworks
+    from rex_ai.agents.rex.text_utils import detect_language
+    out: dict = {"language": detect_language(message)}
+    m = re.search(r"(?:curriculum|syllabus|منهج(?:ا)?)\s+(?:for|on|about|of|لـ?|عن|في)\s+(?:an?\s+|the\s+)?"
+                  r"(.+?)(?=\s+for\s+|\s+لـ?\s*|,|\.|;|\s+with\s+|\s+at\s+|\s+\d|$)", message, re.I)
+    if m and m.group(1).strip():
+        out["course_title"] = m.group(1).strip(" '\"")
+    rest = message[m.end():] if m else message
+    m = re.search(r"\bfor\s+(?!a\b|an\b|the\b)(.+?)(?=,|\.|;|،|\s+\d|\s+at\s+|\s+with\s+|$)", rest, re.I)
+    if m:
+        out["target_audience"] = m.group(1).strip()
+    elif m := re.search(r"(?:^|\s)لل(\w+)", rest):          # "للمحاسبين" = "for the accountants"
+        out["target_audience"] = "ال" + m.group(1)
+    if h := re.search(r"(\d{1,4})\s*(?:hours?|hrs?|h\b|ساعة|ساعات)", message, re.I):
+        out["total_hours"] = int(h.group(1))
+    for level, words in (("Beginner", ["beginner", "مبتدئ"]), ("Intermediate", ["intermediate", "متوسط"]),
+                         ("Advanced", ["advanced", "متقدم"])):
+        if contains_any(message, words):
+            out["skill_level"] = level
+    for f in load_frameworks().values():
+        if contains_any(message, [f.short_name, *f.aliases]) and f.framework_id != "REX-QUALITY":
+            out["accreditation_framework"] = f.framework_id
+            break
+    for code, places in COUNTRY_PLACES.items():
+        if contains_any(message, places):
+            out["country"] = code
+    return out
+
+
+def route_curriculum(message: str) -> dict:
+    """Design a curriculum from chat; asks the brief's discovery questions for anything missing."""
+    fields = parse_curriculum_message(message)
+    missing = [k for k in CURRICULUM_QUESTIONS if not fields.get(k)]
+    if missing:
+        questions = CURRICULUM_QUESTIONS_AR if fields["language"] == "ar" else CURRICULUM_QUESTIONS
+        return {"status": "need_input", "understood": fields, "questions": [questions[k] for k in missing]}
+    cur = curriculum_agent().generate(CurriculumRequest(**fields))
+    return {"status": "draft_created", "curriculum_id": cur.curriculum_id, "course_title": cur.course_title,
+            "modules": [m.title for m in cur.modules], "alignment": cur.metadata.get("alignment"),
+            "next": f"Review it: POST /curriculum/{cur.curriculum_id}/review, PDF: GET /curriculum/{cur.curriculum_id}/pdf"}
+
 
 def route_rfp(message: str) -> dict:
     """Answer a tender question from chat; runs the research first if nothing is stored yet."""

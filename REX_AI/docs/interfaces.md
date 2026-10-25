@@ -31,7 +31,7 @@ owner whose agent uses that model (see the Owner column).
 | `LeadProfile` | `chat_sessions.profile` | M1 | background, education_level, experience_years, interests, career_goal, skill_level, preferred_format, budget, weekly_hours |
 | `LeadCreate` / `Lead` | `leads` | M1 | name, email or phone, interested_course_ids, profile, consent (must be true) |
 | `RFPRecord` | `rfps`, `rfp_alerts` | M2 | title, issuing_organization, country, deadline, eligibility, training_category, submission_link, publication_date, documents, summary, qualification, status, dedupe_hash, source; Sprint 2 adds relevance_score, matched_course_ids, priority, first_seen (existing databases get the columns automatically in `db.init_db`) |
-| `Curriculum`, `GapReport`, `ReviewAction` | `curricula`, `gap_reports`, `reviews`, `accreditation_standards` | M2 | objectives, audience, prerequisites, outcomes, modules, hours, exercises, assessments, capstone; coverage_pct, missing topics/outcomes |
+| `CurriculumRequest`, `Curriculum`, `GapReport`, `GapItem`, `ReviewAction`, `CurriculumRevision`, `CurriculumImport` | `curricula`, `curriculum_versions`, `gap_reports`, `reviews`, `accreditation_standards`, `handoff_events` | M2 | objectives, audience, prerequisites, outcomes, modules, hours, exercises, assessments, capstone, metadata (brief table); coverage_pct, covered / partial / missing items with evidence, missing topics/outcomes, recommendations. Sprint 2 adds optional fields only: `course_id` on the request (the other answers become optional with it), `course_id`, `language`, timestamps on `Curriculum`; `report_id`, `items`, `partial`, `recommendations` on `GapReport` |
 | `DocumentRequest` / `DocumentRecord` | `documents` | M3 | doc_type (10 types), course_id or curriculum_id, language, file_path, download_url, status |
 | `CampaignRequest` / `Campaign` | `campaigns`, `campaign_variants` | M1 | channels, objective, offer, cta, variants, course_facts_used, status |
 | `JobRun`, `HandoffEvent` | `job_runs`, `handoff_events`, `app_logs` | M3 | agent, status, output_ref, error; from_agent → to_agent with payload_id |
@@ -56,9 +56,18 @@ owner whose agent uses that model (see the Owner column).
 | `GET /rfp/alerts` | RFP Research | — → `RFPAlert[]` | Built (Sprint 2) |
 | `POST /rfp/ask` | RFP Research | `RFPAskRequest` → `RFPAskResponse` (RAG over records + tender documents, cited) | Built (Sprint 2) |
 | `POST /rfp/upload` | RFP Research | file → `{file, kind: document/feed}` | Built (Sprint 2) |
-| `POST /curriculum` | Curriculum | `CurriculumRequest` → `Curriculum` | Sprint 2 (M2) |
-| `POST /curriculum/{id}/gap-report` | Curriculum | `{framework}` → `GapReport` | Sprint 2 (M2) |
-| `POST /curriculum/{id}/review` | Curriculum | `ReviewAction` → `Curriculum` | Sprint 2 (M2) |
+| `GET /curriculum/frameworks` | Curriculum | — → `FrameworkInfo[]` | Built (Sprint 2) |
+| `POST /curriculum/research` | Curriculum | `CurriculumRequest` → `CurriculumResearch` (preview, nothing stored) | Built (Sprint 2) |
+| `POST /curriculum` | Curriculum | `CurriculumRequest` → `Curriculum` (201, draft v1, alignment reports stored) | Built (Sprint 2) |
+| `POST /curriculum/import` | Curriculum | `CurriculumImport {course_id or proposal, framework}` → `Curriculum` | Built (Sprint 2) |
+| `GET /curriculum?department=&skill_level=&country=&status=&framework=&industry=&audience=&min_hours=&max_hours=&q=` | Curriculum | — → `Curriculum[]` (metadata filtering) | Built (Sprint 2) |
+| `GET /curriculum/{id}` | Curriculum | — → `Curriculum` (404 if unknown) | Built (Sprint 2) |
+| `POST /curriculum/{id}/gap-report` | Curriculum | `GapReportRequest {framework}` → `GapReport` (404 unknown framework) | Built (Sprint 2) |
+| `GET /curriculum/{id}/gap-reports` | Curriculum | — → `GapReport[]` (latest per framework) | Built (Sprint 2) |
+| `POST /curriculum/{id}/review` | Curriculum | `ReviewAction` → `Curriculum` (409 on an invalid transition; approved → `HandoffEvent` to document) | Built (Sprint 2) |
+| `POST /curriculum/{id}/revise` | Curriculum | `CurriculumRevision {reviewer, instructions or content}` → `Curriculum` (version + 1, draft) | Built (Sprint 2) |
+| `GET /curriculum/{id}/history` | Curriculum | — → `{versions, reviews, gap_reports, handoffs}` | Built (Sprint 2) |
+| `GET /curriculum/{id}/pdf?include_alignment=` | Curriculum | — → PDF file (DRAFT watermark until approved) | Built (Sprint 2) |
 | `POST /documents` | Document | `DocumentRequest` → `DocumentRecord` | Sprint 2 (M3) |
 | `GET /documents/{id}/download` | Document | — → PDF file | Sprint 2 (M3) |
 | `POST /campaigns` | Marketing | `CampaignRequest` → `Campaign` | Sprint 2 (M1) |

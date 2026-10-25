@@ -356,17 +356,33 @@ class RFPAskResponse(BaseModel):
 # Agent 3 - Curriculum & Accreditation Alignment (owner: Member 2)
 # --------------------------------------------------------------------------- #
 class CurriculumRequest(BaseModel):
-    course_title: str
-    target_audience: str
-    skill_level: SkillLevel
+    """The brief's discovery questions (§10): course, audience, level, outcomes, hours, industry/framework,
+    projects. With course_id, anything not given is taken from the catalogue course (no repeated questions)."""
+    course_title: Optional[str] = Field(None, examples=["Data Analysis for Healthcare Quality"])
+    target_audience: Optional[str] = None
+    skill_level: Optional[SkillLevel] = None
     expected_outcomes: list[str] = Field(default_factory=list)
-    total_hours: int = Field(..., gt=0, le=1000)
+    total_hours: Optional[int] = Field(None, gt=0, le=1000)
     industry: Optional[str] = None
     department: Optional[str] = None
     accreditation_framework: Optional[str] = Field(None, examples=["SFIA 9", "ISTQB Foundation"])
     country: Country = Country.EG
     required_projects: list[str] = Field(default_factory=list)
     language: Language = Language.en
+    course_id: Optional[str] = Field(None, description="Existing catalogue course to (re)design; fills missing fields")
+
+    @model_validator(mode="after")
+    def _discovery_answers(self) -> "CurriculumRequest":
+        if self.course_id:
+            return self
+        missing = [name for name, value in (("course_title", self.course_title),
+                                            ("target_audience", self.target_audience),
+                                            ("skill_level", self.skill_level), ("total_hours", self.total_hours))
+                   if not value]
+        if missing:
+            raise ValueError(f"Missing answers to the discovery questions: {', '.join(missing)} "
+                             "(or give course_id of an existing course)")
+        return self
 
 
 class CurriculumModule(BaseModel):
@@ -399,6 +415,21 @@ class Curriculum(BaseModel):
     status: ApprovalStatus = ApprovalStatus.draft
     reviewer_comments: list[str] = Field(default_factory=list)
     version: int = 1
+    # Sprint 2 additions (optional, backwards compatible)
+    course_id: Optional[str] = None
+    language: Language = Language.en
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class GapItem(BaseModel):
+    """One framework competency compared with the curriculum."""
+    competency_id: str
+    competency: str
+    kind: str = Field(..., examples=["topic", "outcome", "structure"])
+    status: str = Field(..., examples=["covered", "partial", "missing"])
+    evidence: Optional[str] = Field(None, description="Where the curriculum covers it, or why it is missing")
+    score: float = Field(0.0, ge=0, le=1)
 
 
 class GapReport(BaseModel):
@@ -411,12 +442,98 @@ class GapReport(BaseModel):
     disclaimer: str = ("This report shows alignment with the selected framework only. "
                        "It is not evidence of official accreditation.")
     sources: list[SourceRef] = Field(default_factory=list)
+    # Sprint 2 additions (optional, backwards compatible)
+    report_id: Optional[str] = None
+    framework_id: Optional[str] = None
+    country: Optional[str] = None
+    partial: list[str] = Field(default_factory=list, description="Only a semantic match - a reviewer should confirm")
+    items: list[GapItem] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
+    curriculum_version: Optional[int] = None
+    created_at: Optional[datetime] = None
 
 
 class ReviewAction(BaseModel):
-    action: ApprovalStatus  # approved | changes_requested | rejected
+    action: ApprovalStatus  # approved | changes_requested | rejected (pending_approval = submit for review)
     reviewer: str
     comment: Optional[str] = None
+
+
+class GapReportRequest(BaseModel):
+    framework: Optional[str] = Field(None, description="Framework id or name; default = the curriculum's framework, "
+                                     "else the best match, else the academy quality baseline",
+                                     examples=["ISTQB Foundation", "SFIA-9", "EG-NAQAAE-PS"])
+
+
+class CurriculumRevision(BaseModel):
+    """A reviewer's modification request. instructions = plain language ("add a module on Power BI",
+    "remove topic X", "add outcome: ...", "set hours to 48"); content = edited curriculum fields."""
+    reviewer: str = Field(..., min_length=1)
+    instructions: Optional[str] = Field(None, max_length=4000)
+    content: Optional[dict[str, Any]] = Field(None, description="Fields of Curriculum to replace, e.g. modules")
+
+    @model_validator(mode="after")
+    def _need_change(self) -> "CurriculumRevision":
+        if not (self.instructions or self.content):
+            raise ValueError("Give instructions or edited content")
+        return self
+
+
+class ProposedCurriculum(BaseModel):
+    """A curriculum designed outside REX (e.g. by an instructor), imported to be checked against a framework."""
+    course_title: str
+    target_audience: str = ""
+    objectives: list[str] = Field(default_factory=list)
+    prerequisites: list[str] = Field(default_factory=list)
+    learning_outcomes: list[str] = Field(default_factory=list)
+    modules: list[CurriculumModule] = Field(default_factory=list)
+    training_hours: Optional[float] = None
+    practical_exercises: list[str] = Field(default_factory=list)
+    assessments: list[Assessment] = Field(default_factory=list)
+    capstone_project: str = ""
+    department: Optional[str] = None
+    skill_level: Optional[SkillLevel] = None
+
+
+class CurriculumImport(BaseModel):
+    course_id: Optional[str] = Field(None, description="Import an existing catalogue course as a curriculum")
+    proposal: Optional[ProposedCurriculum] = None
+    framework: Optional[str] = None
+    country: Country = Country.EG
+    language: Language = Language.en
+
+    @model_validator(mode="after")
+    def _need_input(self) -> "CurriculumImport":
+        if not (self.course_id or self.proposal):
+            raise ValueError("Provide course_id or proposal")
+        return self
+
+
+class FrameworkInfo(BaseModel):
+    framework_id: str
+    name: str
+    short_name: str
+    country: str
+    source_id: str
+    url: Optional[str] = None
+    status: str = "to_verify"
+    exam_prep: bool = False
+    competencies: int
+    note: Optional[str] = None
+
+
+class CurriculumResearch(BaseModel):
+    """What the agent found before generating: shown to the user and stored in the curriculum's metadata."""
+    course_title: str
+    department: Optional[str] = None
+    framework_id: Optional[str] = None
+    framework_reason: Optional[str] = None
+    related_courses: list[str] = Field(default_factory=list)
+    industry_roles: list[str] = Field(default_factory=list)
+    industry_skills: list[str] = Field(default_factory=list)
+    reference_modules: list[dict[str, Any]] = Field(default_factory=list, description="title, topics, citation")
+    notes: list[str] = Field(default_factory=list)
+    sources: list[SourceRef] = Field(default_factory=list)
 
 
 # --------------------------------------------------------------------------- #
