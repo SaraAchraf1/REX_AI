@@ -1,0 +1,22 @@
+# Reference examples for the Document Agent (brief §11 "Required Reference Documents").
+# Each file is indexed in the shared RAG collection "doc_templates" with the metadata below, so the agent retrieves
+# the example for the document type it is writing (metadata filter doc_type) and cites it as its template source.
+# SAMPLE examples written by the team: replace them with the academy's approved documents when they arrive
+# (PDF, Word or Markdown all work - add a line here with the doc_type).
+
+defaults:
+  source_id: SRC-DOC-TEMPLATES
+  status: sample
+  update_date: 2026-10-27
+
+files:
+  course_description_example.md: {doc_type: course_description}
+  course_proposal_example.md: {doc_type: course_proposal}
+  curriculum_example.md: {doc_type: curriculum_pdf}
+  participant_guide_example.md: {doc_type: participant_guide}
+  facilitator_guide_example.md: {doc_type: facilitator_guide}
+  presentation_outline_example.md: {doc_type: presentation_outline}
+  question_bank_example.md: {doc_type: question_bank}
+  assessment_rubric_example.md: {doc_type: assessment_rubric}
+  capstone_brief_example.md: {doc_type: capstone_brief}
+  outcomes_assessment_plan_example.md: {doc_type: outcomes_assessment_plan}

@@ -66,7 +66,16 @@ internal:
     location: data/templates/   # requested from Eslam El Hefny (brief §11)
     access: file
     status: to_verify
-    note: Pending from the academy; needed before the Document Agent's template work in Sprint 2.
+    note: Pending from the academy. When they arrive, put them in data/doc_templates/references/ with
+      source_id SRC-ACAD-TEMPLATES in its manifest.yaml; the Document Agent then retrieves and cites them.
+  - source_id: SRC-DOC-TEMPLATES
+    name: Document templates and reference examples written by the team (10 document types, EN/AR headings)
+    owner: Member 3
+    used_by: [document]
+    location: data/doc_templates/
+    access: file
+    status: sample
+    note: templates.yaml fixes the sections of each document; references/ is indexed in the RAG collection doc_templates.
   - source_id: SRC-ACAD-QUALITY
     name: Academy curriculum quality baseline (instructional-design checklist)
     owner: Member 2

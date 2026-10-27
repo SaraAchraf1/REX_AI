@@ -242,7 +242,23 @@ CREATE TABLE IF NOT EXISTS documents (
     status         TEXT NOT NULL DEFAULT 'draft',
     sources        TEXT,                            -- JSON list
     emailed_to     TEXT,                            -- JSON list, only after approval
-    created_at     TEXT NOT NULL
+    created_at     TEXT NOT NULL,
+    content        TEXT,                            -- JSON DocumentRecord (sections, metadata) - Sprint 2
+    request        TEXT,                            -- JSON DocumentRequest
+    version        INTEGER NOT NULL DEFAULT 1,
+    updated_at     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_documents_filters ON documents(doc_type, status, course_id, curriculum_id);
+
+-- Every saved version of a document (generation, reviewer edits) - nothing is overwritten
+CREATE TABLE IF NOT EXISTS document_versions (
+    document_id  TEXT NOT NULL REFERENCES documents(document_id) ON DELETE CASCADE,
+    version      INTEGER NOT NULL,
+    content      TEXT NOT NULL,                     -- JSON DocumentRecord
+    change_note  TEXT,
+    changed_by   TEXT,
+    created_at   TEXT NOT NULL,
+    PRIMARY KEY (document_id, version)
 );
 
 -- ----------------------------------------------------------------------------

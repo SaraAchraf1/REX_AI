@@ -560,12 +560,42 @@ class DocumentRequest(BaseModel):
     audience: Optional[str] = None
     template_id: Optional[str] = None
     email_to: Optional[list[EmailStr]] = Field(None, description="Only sent after the document is approved")
+    instructions: Optional[str] = Field(None, max_length=2000, description="Extra wishes for the LLM, e.g. "
+                                        "'focus on the banking sector'")
 
     @model_validator(mode="after")
     def _need_input(self) -> "DocumentRequest":
         if not (self.course_id or self.curriculum_id):
             raise ValueError("Provide course_id or curriculum_id")
         return self
+
+
+class DocTable(BaseModel):
+    columns: list[str]
+    rows: list[list[str]]
+    widths: Optional[list[float]] = Field(None, description="Relative column widths, e.g. [1, 3, 1]")
+
+    @model_validator(mode="after")
+    def _same_width(self) -> "DocTable":
+        if any(len(r) != len(self.columns) for r in self.rows):
+            raise ValueError("Every table row needs one cell per column")
+        if self.widths and len(self.widths) != len(self.columns):
+            raise ValueError("widths needs one value per column")
+        return self
+
+
+class DocSection(BaseModel):
+    """One block of a generated document. Rendered in this order: heading, paragraphs, bullets, table, notes."""
+    key: str = Field(..., description="Template section key; repeated sections get a suffix, e.g. module_notes:3")
+    heading: str
+    level: int = Field(1, ge=1, le=2)
+    paragraphs: list[str] = Field(default_factory=list)
+    bullets: list[str] = Field(default_factory=list)
+    numbered: bool = False
+    table: Optional[DocTable] = None
+    notes: list[str] = Field(default_factory=list, description="Speaker / facilitator notes, shown in a box")
+    locked: bool = Field(False, description="Facts from approved data (hours, fees, weights): the LLM never "
+                                            "rewrites them, only a reviewer can")
 
 
 class DocumentRecord(BaseModel):
@@ -580,6 +610,63 @@ class DocumentRecord(BaseModel):
     status: ApprovalStatus = ApprovalStatus.draft
     sources: list[SourceRef] = Field(default_factory=list)
     created_at: datetime
+    # Sprint 2 additions (optional, backwards compatible)
+    version: int = 1
+    template_id: Optional[str] = None
+    sections: list[DocSection] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict, description="course facts used, generated_by, notes...")
+    reviewer_comments: list[str] = Field(default_factory=list)
+    emailed_to: list[str] = Field(default_factory=list)
+    updated_at: Optional[datetime] = None
+
+
+class DocumentEdit(BaseModel):
+    """A reviewer's changes: edited sections (matched by key; a new key is added at the end), sections to remove,
+    a new title, and/or plain-language instructions applied by the LLM (when configured)."""
+    reviewer: str = Field(..., min_length=1)
+    sections: list[DocSection] = Field(default_factory=list)
+    remove_sections: list[str] = Field(default_factory=list)
+    title: Optional[str] = None
+    instructions: Optional[str] = Field(None, max_length=4000)
+
+    @model_validator(mode="after")
+    def _need_change(self) -> "DocumentEdit":
+        if not (self.sections or self.remove_sections or self.title or self.instructions):
+            raise ValueError("Give edited sections, sections to remove, a title or instructions")
+        return self
+
+
+class DocumentEmail(BaseModel):
+    to: list[EmailStr] = Field(..., min_length=1)
+    sender: str = Field(..., min_length=1, description="Who sends it (logged)")
+    message: Optional[str] = Field(None, max_length=4000)
+
+
+class DocumentPackRequest(BaseModel):
+    """Several documents from one source in one call, e.g. after a curriculum is approved (handoff)."""
+    curriculum_id: Optional[str] = None
+    course_id: Optional[str] = None
+    doc_types: list[DocumentType] = Field(default_factory=lambda: [
+        DocumentType.course_description, DocumentType.participant_guide, DocumentType.question_bank])
+    language: Optional[Language] = None
+    audience: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _need_input(self) -> "DocumentPackRequest":
+        if not (self.course_id or self.curriculum_id):
+            raise ValueError("Provide course_id or curriculum_id")
+        return self
+
+
+class DocumentTypeInfo(BaseModel):
+    doc_type: DocumentType
+    template_id: str
+    title: str
+    title_ar: str
+    reader: str
+    description: str
+    sections: list[str]
+    templates: list[str] = Field(default_factory=list, description="All template ids for this type")
 
 
 # --------------------------------------------------------------------------- #
