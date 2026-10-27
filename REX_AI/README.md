@@ -8,7 +8,7 @@ specialized agents behind one orchestrator:
 | 1 | REX Course Assistant (recommendation chatbot) | Member 1 | **Sprint 1 prototype working** |
 | 2 | Tender / RFP Research (Egypt + Saudi Arabia only) | Member 2 | **Sprint 2 working** (see below) |
 | 3 | Curriculum & Accreditation Alignment | Member 2 | **Sprint 2 working** (see below) |
-| 4 | Document Generation (PDF) | Member 3 | Contract defined, Sprint 2 |
+| 4 | Educational Content & Document Generation | Member 3 | **Sprint 2 working** (see below) |
 | 5 | AI Marketing | Member 1 | Contract defined, Sprint 2 |
 | — | Orchestrator, API, app shell, integration | Member 3 | Keyword router + API live |
 
@@ -49,6 +49,7 @@ dates still come only from the data files. Without a key REX uses its determinis
 ```
 data/                       sample academy data + data_sources.yaml (all approved/candidate sources)
   curriculum/               frameworks, industry skills and reference syllabi for the Curriculum Agent
+  doc_templates/            document templates (10 types, EN/AR) + reference examples for the Document Agent
   courses.json  instructors.json  pricing_promotions.json  schedules.json  faqs.json  admission_requirements.json
 docs/interfaces.md          data model, endpoints, agent handoff contract  <- read before coding
 rex_ai/
@@ -59,9 +60,10 @@ rex_ai/
   agents/rex/               REX Assistant: knowledge base, retriever, profile extractor, recommender, LLM, prompts
   agents/rfp/               RFP & Tender Research Agent
   agents/curriculum/        Curriculum & Accreditation Alignment Agent
+  agents/documents/         Educational Content & Document Generation Agent
   api/main.py               FastAPI app (+ orchestrator stub)
 frontend/streamlit_app.py   chat UI
-frontend/pages/              RFP Research and Curriculum pages of the same app
+frontend/pages/              RFP Research, Curriculum and Documents pages of the same app
 scripts/build_kb.py         validates data, writes data/kb/kb_chunks.jsonl for a vector store
 tests/                      knowledge base, recommender and API tests
 ```
@@ -233,3 +235,53 @@ Framework summaries, reference syllabi and industry skills are team-made (`sampl
 `data_sources.yaml`): check them against the official documents and add the academy's own references to
 `data/curriculum/references/` (with a line in `manifest.yaml`) before real use. PDFs need a TTF font with Arabic
 glyphs; Arial/Tahoma (Windows), DejaVu Sans or Noto Naskh (Linux) are found automatically, or set `REX_PDF_FONT`.
+
+## Agent 4 — Educational Content & Document Generation (Sprint 2)
+
+Turns an approved curriculum (or a catalogue course) into professionally formatted training documents, in English
+or Arabic, and takes each one through review before it can be distributed. Code: `rex_ai/agents/documents/`, UI:
+the **Documents** page of the Streamlit app. Works without an LLM; with `OPENAI_API_KEY` set, the LLM rewrites the
+unlocked sections in the style of the academy's reference examples.
+
+```
+doc type + curriculum / course ──> collect facts ──────────────────────> template sections ──> LLM polish ──> claim guard ──> PDF, draft v1
+ (+ audience, language,            curriculum · catalogue (fees, dates,    (templates.yaml,      (optional,      (no "accredited
+  template, wishes)                instructors) · RAG curriculum_refs      rules, EN/AR)         unlocked only)   by" wording)
+                                   per module · RAG doc_templates examples
+edit (sections / instructions) ──> v2 draft     review: submit ──> approved (HandoffEvent document → marketing, e-mail) | changes_requested | rejected
+```
+
+| Brief requirement | Where |
+| --- | --- |
+| Documents 26-35: course description, proposal, curriculum PDF, participant guide, facilitator guide, presentation outline, question bank, assessment rubrics, capstone brief, outcomes & assessment plan | all 10 types: `builders.py` fills every section of the type's template in `data/doc_templates/templates.yaml` |
+| Select a document type | `GET /documents/types`, `DocumentRequest.doc_type`, `template_id` for an alternative template |
+| Collect or retrieve relevant course information | `facts.py`: the curriculum (Agent 3) with its alignment reports; for a course id, its newest approved curriculum, else the catalogue course; fees, offers, schedules, instructors from the academy data; reference-syllabus passages per module from the shared RAG (`curriculum_refs`, matched by shared words so unrelated syllabi never leak in) |
+| Structured content based on templates | sections in template order; hours, fees, weights, schedules and tables are **locked** facts copied from data (never estimated; missing facts are reported as missing); question bank answer keys, rubric points that add up to each assessment's weight, outcome → module → assessment map |
+| Export to PDF | `pdf.py` (reportlab, same look as the curriculum PDF): sections, tables, notes boxes, sources, review history; DRAFT watermark until approved; question banks marked CONFIDENTIAL |
+| Arabic and English | every heading and generated sentence exists in both; Arabic PDFs are shaped right-to-left; the language follows the curriculum unless asked |
+| Review and edit | `PATCH /documents/{id}`: replace / add / remove sections, change the title, or plain-language instructions (LLM) → new version, nothing overwritten (`document_versions`); `POST /documents/{id}/review` |
+| Downloads and e-mail after approval | `GET /documents/{id}/download`; `POST /documents/{id}/email` only for approved documents (SMTP via `REX_SMTP_*`, otherwise an `.eml` file in `outputs/documents/outbox/`); `email_to` on the request is sent automatically on approval |
+| Agent-to-agent workflow (brief §4) | approved curricula appear in `GET /documents/handoffs` (one click creates a document pack); a document built from a curriculum can be approved only if that curriculum is approved and unchanged; approval emits `HandoffEvent document → marketing` |
+| Templates and reference documents (brief §11) | `data/doc_templates/references/` (one sample example per type, indexed in the RAG collection `doc_templates` with metadata `doc_type`); replace them with the academy's documents (PDF, Word or Markdown) and a line in `manifest.yaml` |
+| Never claim accreditation | the Curriculum Agent's claim guard runs on generated, LLM and edited text; alignment is always shown with its disclaimer |
+
+```bash
+python scripts/run_documents.py --types                                            # the 10 types and their templates
+python scripts/run_documents.py --type participant_guide --curriculum CUR-XXXX     # from a curriculum
+python scripts/run_documents.py --type course_proposal --course DS-101 --audience "Ministry of Health"
+python scripts/run_documents.py --type question_bank --course DS-101 --language ar # Arabic
+python scripts/run_documents.py --pack --curriculum CUR-XXXX                       # description + guide + question bank
+python scripts/run_documents.py --approve DOC-XXXX --reviewer Dean
+python scripts/run_documents.py --email DOC-XXXX --to coordinator@academy.example --reviewer Dean
+pytest -q tests/test_document_agent.py                                             # 32 test cases
+```
+
+Endpoints: `GET /documents/types`, `GET /documents/handoffs`, `POST /documents`, `POST /documents/pack`,
+`GET /documents` (filters: doc_type, status, course_id, curriculum_id, language, q), `GET /documents/{id}`,
+`PATCH /documents/{id}`, `POST /documents/{id}/review`, `POST /documents/{id}/email`,
+`GET /documents/{id}/history`, `GET /documents/{id}/download`. `POST /route` sends "participant guide for DS-101"
+style messages here and asks the brief's questions (document type, course or curriculum) when something is missing.
+
+Rule-made question-bank items check the course structure and outcomes (plus practical items from the reference
+syllabi); with the LLM enabled they are rewritten as content questions. Either way an instructor reviews them before
+use, and the document says who wrote them.

@@ -32,7 +32,7 @@ owner whose agent uses that model (see the Owner column).
 | `LeadCreate` / `Lead` | `leads` | M1 | name, email or phone, interested_course_ids, profile, consent (must be true) |
 | `RFPRecord` | `rfps`, `rfp_alerts` | M2 | title, issuing_organization, country, deadline, eligibility, training_category, submission_link, publication_date, documents, summary, qualification, status, dedupe_hash, source; Sprint 2 adds relevance_score, matched_course_ids, priority, first_seen (existing databases get the columns automatically in `db.init_db`) |
 | `CurriculumRequest`, `Curriculum`, `GapReport`, `GapItem`, `ReviewAction`, `CurriculumRevision`, `CurriculumImport` | `curricula`, `curriculum_versions`, `gap_reports`, `reviews`, `accreditation_standards`, `handoff_events` | M2 | objectives, audience, prerequisites, outcomes, modules, hours, exercises, assessments, capstone, metadata (brief table); coverage_pct, covered / partial / missing items with evidence, missing topics/outcomes, recommendations. Sprint 2 adds optional fields only: `course_id` on the request (the other answers become optional with it), `course_id`, `language`, timestamps on `Curriculum`; `report_id`, `items`, `partial`, `recommendations` on `GapReport` |
-| `DocumentRequest` / `DocumentRecord` | `documents` | M3 | doc_type (10 types), course_id or curriculum_id, language, file_path, download_url, status |
+| `DocumentRequest` / `DocumentRecord`, `DocSection`, `DocTable`, `DocumentEdit`, `DocumentEmail`, `DocumentPackRequest`, `DocumentTypeInfo` | `documents`, `document_versions`, `reviews`, `handoff_events` | M3 | doc_type (10 types), course_id or curriculum_id, language, file_path, download_url, status. Sprint 2 adds optional fields only: `instructions` on the request; `version`, `template_id`, `sections` (heading, paragraphs, bullets, table, notes, locked), `metadata` (facts used, generated_by, notes), `reviewer_comments`, `emailed_to`, `updated_at` on the record (existing databases get the new `documents` columns automatically in `db.init_db`) |
 | `CampaignRequest` / `Campaign` | `campaigns`, `campaign_variants` | M1 | channels, objective, offer, cta, variants, course_facts_used, status |
 | `JobRun`, `HandoffEvent` | `job_runs`, `handoff_events`, `app_logs` | M3 | agent, status, output_ref, error; from_agent → to_agent with payload_id |
 
@@ -68,8 +68,17 @@ owner whose agent uses that model (see the Owner column).
 | `POST /curriculum/{id}/revise` | Curriculum | `CurriculumRevision {reviewer, instructions or content}` → `Curriculum` (version + 1, draft) | Built (Sprint 2) |
 | `GET /curriculum/{id}/history` | Curriculum | — → `{versions, reviews, gap_reports, handoffs}` | Built (Sprint 2) |
 | `GET /curriculum/{id}/pdf?include_alignment=` | Curriculum | — → PDF file (DRAFT watermark until approved) | Built (Sprint 2) |
-| `POST /documents` | Document | `DocumentRequest` → `DocumentRecord` | Sprint 2 (M3) |
-| `GET /documents/{id}/download` | Document | — → PDF file | Sprint 2 (M3) |
+| `GET /documents/types` | Document | — → `DocumentTypeInfo[]` (10 types, template, sections) | Built (Sprint 2) |
+| `GET /documents/handoffs` | Document | — → approved curricula handed over, with the documents made from them | Built (Sprint 2) |
+| `POST /documents` | Document | `DocumentRequest` → `DocumentRecord` (201, draft v1 with sections and PDF) | Built (Sprint 2) |
+| `POST /documents/pack` | Document | `DocumentPackRequest` → `DocumentRecord[]` | Built (Sprint 2) |
+| `GET /documents?doc_type=&status=&course_id=&curriculum_id=&language=&q=` | Document | — → `DocumentRecord[]` | Built (Sprint 2) |
+| `GET /documents/{id}` | Document | — → `DocumentRecord` (404 if unknown) | Built (Sprint 2) |
+| `PATCH /documents/{id}` | Document | `DocumentEdit {reviewer, sections, remove_sections, title, instructions}` → `DocumentRecord` (version + 1, draft) | Built (Sprint 2) |
+| `POST /documents/{id}/review` | Document | `ReviewAction` → `DocumentRecord` (409 if the curriculum is not approved / changed; approved → `HandoffEvent` to marketing) | Built (Sprint 2) |
+| `POST /documents/{id}/email` | Document | `DocumentEmail {to, sender, message}` → `DocumentRecord` (409 unless approved) | Built (Sprint 2) |
+| `GET /documents/{id}/history` | Document | — → `{versions, reviews, handoffs}` | Built (Sprint 2) |
+| `GET /documents/{id}/download` | Document | — → PDF file (DRAFT watermark until approved) | Built (Sprint 2) |
 | `POST /campaigns` | Marketing | `CampaignRequest` → `Campaign` | Sprint 2 (M1) |
 | `POST /campaigns/{id}/review` | Marketing | `ReviewAction` → `Campaign` | Sprint 2 (M1) |
 

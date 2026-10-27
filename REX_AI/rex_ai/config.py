@@ -55,3 +55,6 @@ CURRICULUM_SEMANTIC_MIN = os.getenv("REX_CURRICULUM_SEMANTIC_MIN", "")
 # TTF font with Arabic glyphs for PDFs (and optional bold variant); empty = first one found on the system
 PDF_FONT = os.getenv("REX_PDF_FONT", "")
 PDF_FONT_BOLD = os.getenv("REX_PDF_FONT_BOLD", "")
+# ---- Document Generation Agent (rex_ai/agents/documents) ---------------------
+DOC_TEMPLATES_DIR = Path(os.getenv("REX_DOC_TEMPLATES_DIR", DATA_DIR / "doc_templates"))
+DOCUMENT_OUTPUT_DIR = Path(os.getenv("REX_DOCUMENT_OUTPUT_DIR", ROOT_DIR / "outputs" / "documents"))

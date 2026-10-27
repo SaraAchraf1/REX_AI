@@ -44,6 +44,7 @@ def init_db(db_path: Optional[Path] = None, seed: bool = True) -> None:
 _ADDED_COLUMNS = {
     "rfps": {"source_title": "TEXT", "relevance_score": "REAL NOT NULL DEFAULT 0", "matched_course_ids": "TEXT",
              "priority": "TEXT NOT NULL DEFAULT 'normal'", "first_seen": "TEXT"},
+    "documents": {"content": "TEXT", "request": "TEXT", "version": "INTEGER NOT NULL DEFAULT 1", "updated_at": "TEXT"},
 }
 
 
@@ -442,3 +443,72 @@ def list_handoffs(payload_id: Optional[str] = None, db_path: Optional[Path] = No
         sql, args = sql + " WHERE payload_id=?", [payload_id]
     with connect(db_path) as conn:
         return [dict(r) for r in conn.execute(sql + " ORDER BY created_at, rowid", args)]
+
+
+# --------------------------------------------------------------------------- #
+# Generated documents (owner: Member 3)
+# --------------------------------------------------------------------------- #
+def save_document(doc: dict, request: dict, change_note: Optional[str] = None, changed_by: Optional[str] = None,
+                  db_path: Optional[Path] = None) -> None:
+    """Insert or update a document and keep a copy of this version in document_versions."""
+    now = _now()
+    content = json.dumps(doc, ensure_ascii=False, default=str)
+    with connect(db_path) as conn:
+        conn.execute(
+            """INSERT INTO documents (document_id, doc_type, title, course_id, curriculum_id, language, file_path,
+                 status, sources, emailed_to, created_at, content, request, version, updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+               ON CONFLICT(document_id) DO UPDATE SET title=excluded.title, file_path=excluded.file_path,
+                 status=excluded.status, sources=excluded.sources, emailed_to=excluded.emailed_to,
+                 content=excluded.content, version=excluded.version, updated_at=excluded.updated_at""",
+            (doc["document_id"], doc["doc_type"], doc["title"], doc.get("course_id"), doc.get("curriculum_id"),
+             doc["language"], doc["file_path"], doc["status"], json.dumps(doc.get("sources") or [], default=str),
+             json.dumps(doc.get("emailed_to") or []), doc.get("created_at") or now, content,
+             json.dumps(request, ensure_ascii=False, default=str), doc.get("version", 1), now))
+        conn.execute("INSERT OR REPLACE INTO document_versions VALUES (?,?,?,?,?,?)",
+                     (doc["document_id"], doc.get("version", 1), content, change_note, changed_by, now))
+
+
+def _document_row(row: sqlite3.Row) -> dict:
+    r = dict(row)
+    r["content"] = json.loads(r["content"]) if r.get("content") else None
+    r["request"] = json.loads(r["request"]) if r.get("request") else {}
+    return r
+
+
+def get_document(document_id: str, db_path: Optional[Path] = None) -> Optional[dict]:
+    with connect(db_path) as conn:
+        row = conn.execute("SELECT * FROM documents WHERE document_id=?", (document_id,)).fetchone()
+        return _document_row(row) if row else None
+
+
+def list_documents(doc_type: Optional[str] = None, status: Optional[str] = None, course_id: Optional[str] = None,
+                   curriculum_id: Optional[str] = None, language: Optional[str] = None, q: Optional[str] = None,
+                   limit: int = 200, db_path: Optional[Path] = None) -> list[dict]:
+    """Newest first. Rows from Sprint 1 without content are skipped (nothing to show or edit)."""
+    sql, args = "SELECT * FROM documents WHERE content IS NOT NULL", []
+    for col, val in (("doc_type", doc_type), ("status", status), ("course_id", course_id),
+                     ("curriculum_id", curriculum_id), ("language", language)):
+        if val:
+            sql += f" AND {col}=?"
+            args.append(val)
+    if q:
+        sql += " AND (title LIKE ? OR content LIKE ?)"
+        args += [f"%{q}%"] * 2
+    sql += " ORDER BY coalesce(updated_at, created_at) DESC, rowid DESC LIMIT ?"
+    args.append(limit)
+    with connect(db_path) as conn:
+        return [_document_row(r) for r in conn.execute(sql, args)]
+
+
+def list_document_versions(document_id: str, db_path: Optional[Path] = None) -> list[dict]:
+    with connect(db_path) as conn:
+        rows = conn.execute("SELECT * FROM document_versions WHERE document_id=? ORDER BY version", (document_id,))
+        return [{**dict(r), "content": json.loads(r["content"])} for r in rows]
+
+
+def list_handoffs_to(to_agent: str, db_path: Optional[Path] = None) -> list[dict]:
+    with connect(db_path) as conn:
+        rows = conn.execute("SELECT * FROM handoff_events WHERE to_agent=? ORDER BY created_at DESC, rowid DESC",
+                            (to_agent,))
+        return [dict(r) for r in rows]

@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 
 from rex_ai import config
 from rex_ai.agents.curriculum.agent import CurriculumAgent, NotFound
+from rex_ai.agents.documents.agent import DocumentAgent
 from rex_ai.agents.rex.assistant import RexAssistant
 from rex_ai.agents.rex.knowledge_base import get_kb
 from rex_ai.agents.rex.text_utils import contains_any
@@ -23,7 +24,8 @@ from rex_ai.agents.rfp.taxonomy import COUNTRY_PLACES
 from rex_ai.core import data_sync, db
 from rex_ai.core.schemas import (AgentName, ApprovalStatus, ChatRequest, ChatResponse, Country, Course, Curriculum,
                                  CurriculumImport, CurriculumRequest, CurriculumResearch, CurriculumRevision,
-                                 ErrorResponse, FrameworkInfo, GapReport, GapReportRequest, Lead, LeadCreate, RAGHit,
+                                 DocumentEdit, DocumentEmail, DocumentPackRequest, DocumentRecord, DocumentRequest,
+                                 DocumentType, DocumentTypeInfo, ErrorResponse, FrameworkInfo, GapReport, GapReportRequest, Lead, LeadCreate, RAGHit,
                                  RAGSearchRequest, RAGSearchResponse, ReviewAction, RFPAlert, RFPAskRequest,
                                  RFPAskResponse, RFPCategory, RFPRecord, RFPRunRequest, RFPRunResult, RFPStatus,
                                  RFPStatusUpdate, RouteRequest, RouteResponse, SkillLevel)
@@ -403,11 +405,144 @@ def curriculum_pdf(curriculum_id: str, include_alignment: bool = True):
     return FileResponse(path, media_type="application/pdf", filename=path.name)
 
 
+# ------------------------------------------------------------ Educational Content & Document Generation (Agent 4)
+def document_agent() -> DocumentAgent:
+    rex()                                # DB initialised, catalogue loaded
+    return DocumentAgent()
+
+
+@app.get("/documents/types", response_model=list[DocumentTypeInfo], tags=["Documents"])
+def document_types() -> list[DocumentTypeInfo]:
+    """The 10 document types, their default template and its sections (data/doc_templates/templates.yaml)."""
+    return DocumentAgent.types()
+
+
+@app.get("/documents/handoffs", tags=["Documents"])
+def document_handoffs() -> list[dict]:
+    """Approved curricula handed over by the Curriculum Agent, with the documents already made from them."""
+    return document_agent().pending_handoffs()
+
+
+@app.post("/documents", response_model=DocumentRecord, status_code=201, tags=["Documents"],
+          responses={404: {"model": ErrorResponse}})
+def document_generate(req: DocumentRequest):
+    """Generate one document from a curriculum (curriculum_id) or a catalogue course (course_id): template sections
+    filled from the course data, reference syllabi (RAG) and, when configured, polished by the LLM. Stored as a
+    draft with its PDF. audience = who it is prepared for (e.g. the client of a proposal); email_to is sent only
+    after approval."""
+    try:
+        return document_agent().generate(req)
+    except NotFound as exc:
+        return _error(404, "not_found", str(exc))
+
+
+@app.post("/documents/pack", response_model=list[DocumentRecord], status_code=201, tags=["Documents"],
+          responses={404: {"model": ErrorResponse}})
+def document_pack(req: DocumentPackRequest):
+    """Several documents from one source in one call (default: course description, participant guide, question bank)."""
+    try:
+        return document_agent().generate_pack(req)
+    except NotFound as exc:
+        return _error(404, "not_found", str(exc))
+
+
+@app.get("/documents", response_model=list[DocumentRecord], tags=["Documents"])
+def document_list(doc_type: DocumentType | None = None, status: ApprovalStatus | None = None,
+                  course_id: str | None = None, curriculum_id: str | None = None, language: str | None = None,
+                  q: str | None = None) -> list[DocumentRecord]:
+    return document_agent().search(doc_type=doc_type and doc_type.value, status=status and status.value,
+                                   course_id=course_id and course_id.upper(), curriculum_id=curriculum_id,
+                                   language=language, q=q)
+
+
+@app.get("/documents/{document_id}", response_model=DocumentRecord, tags=["Documents"],
+         responses={404: {"model": ErrorResponse}})
+def document_get(document_id: str):
+    try:
+        return document_agent().get(document_id)
+    except NotFound as exc:
+        return _error(404, "not_found", str(exc))
+
+
+@app.patch("/documents/{document_id}", response_model=DocumentRecord, tags=["Documents"],
+           responses={404: {"model": ErrorResponse}})
+def document_edit(document_id: str, edit: DocumentEdit):
+    """Reviewer edits: replace sections (by key) or add new ones, remove sections, change the title, or give
+    plain-language instructions (applied by the LLM). Creates a new version in draft; metadata.last_edit lists what
+    was applied and what was not."""
+    try:
+        return document_agent().edit(document_id, edit)
+    except NotFound as exc:
+        return _error(404, "not_found", str(exc))
+
+
+@app.post("/documents/{document_id}/review", response_model=DocumentRecord, tags=["Documents"],
+          responses={404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}})
+def document_review(document_id: str, action: ReviewAction):
+    """pending_approval = submit; approved (only if its curriculum is approved and unchanged; hands off to the
+    Marketing Agent and sends any pending e-mail), changes_requested or rejected."""
+    try:
+        return document_agent().review(document_id, action)
+    except NotFound as exc:
+        return _error(404, "not_found", str(exc))
+    except ValueError as exc:
+        return _error(409, "invalid_transition", str(exc))
+
+
+@app.post("/documents/{document_id}/email", response_model=DocumentRecord, tags=["Documents"],
+          responses={404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}, 502: {"model": ErrorResponse}})
+def document_email(document_id: str, req: DocumentEmail):
+    """E-mail the PDF of an APPROVED document (SMTP when configured, else saved to outputs/documents/outbox/)."""
+    try:
+        return document_agent().email(document_id, req)
+    except NotFound as exc:
+        return _error(404, "not_found", str(exc))
+    except ValueError as exc:
+        return _error(409, "not_approved", str(exc))
+    except RuntimeError as exc:
+        return _error(502, "email_failed", str(exc))
+
+
+@app.get("/documents/{document_id}/history", tags=["Documents"], responses={404: {"model": ErrorResponse}})
+def document_history(document_id: str):
+    """Versions, review decisions and agent handoffs."""
+    try:
+        return document_agent().history(document_id)
+    except NotFound as exc:
+        return _error(404, "not_found", str(exc))
+
+
+@app.get("/documents/{document_id}/download", tags=["Documents"], response_class=FileResponse,
+         responses={404: {"model": ErrorResponse}})
+def document_download(document_id: str):
+    """The PDF of the current version (DRAFT watermark until approved)."""
+    try:
+        path = document_agent().pdf(document_id)
+    except NotFound as exc:
+        return _error(404, "not_found", str(exc))
+    return FileResponse(path, media_type="application/pdf", filename=path.name)
+
+
 # ---------------------------------------------------------- Orchestrator
+DOC_TYPE_HINTS = {
+    "course_description": ["course description", "course brochure", "وصف الدورة", "وصف دورة"],
+    "course_proposal": ["proposal", "عرض تدريبي", "عرض فني"],
+    "curriculum_pdf": ["curriculum pdf", "curriculum document"],
+    "participant_guide": ["participant guide", "learner guide", "student guide", "trainee guide", "workbook",
+                          "دليل المتدرب", "دليل المشارك"],
+    "facilitator_guide": ["facilitator guide", "instructor guide", "trainer guide", "دليل المدرب", "دليل الميسر"],
+    "presentation_outline": ["presentation", "slides", "slide deck", "عرض تقديمي", "شرائح"],
+    "question_bank": ["question bank", "quiz questions", "exam questions", "بنك الأسئلة", "بنك الاسئلة", "بنك أسئلة"],
+    "assessment_rubric": ["rubric", "معايير التقييم", "روبريك"],
+    "capstone_brief": ["capstone brief", "project brief", "موجز المشروع"],
+    "outcomes_assessment_plan": ["assessment plan", "outcomes plan", "خطة التقييم", "خطة نواتج التعلم"],
+}
+# Order matters: a document request often names its curriculum ("participant guide for curriculum CUR-..."),
+# so document types are checked before the curriculum keywords.
 ROUTING_HINTS = {
     AgentName.rfp_research: ["tender", "rfp", "rfq", "مناقصه", "مناقصة", "مناقصات", "منافسة", "منافسات"],
+    AgentName.document: ["pdf"] + [h for hints in DOC_TYPE_HINTS.values() for h in hints],
     AgentName.curriculum: ["curriculum", "syllabus design", "accreditation", "منهج", "اعتماد"],
-    AgentName.document: ["pdf", "participant guide", "facilitator guide", "question bank", "rubric", "proposal"],
     AgentName.marketing: ["campaign", "ad copy", "linkedin post", "caption", "whatsapp message", "حمله"],
 }
 
@@ -423,6 +558,9 @@ def route(req: RouteRequest) -> RouteResponse:
             if agent == AgentName.curriculum:
                 return RouteResponse(agent=agent, intent="curriculum_design", confidence=0.7,
                                      result=route_curriculum(req.message))
+            if agent == AgentName.document:
+                return RouteResponse(agent=agent, intent="document_generation", confidence=0.7,
+                                     result=route_document(req.message))
             return RouteResponse(agent=agent, intent=agent.value, confidence=0.6,
                                  result={"status": "not_implemented", "available_in": "Sprint 2"})
     resp = rex().handle(ChatRequest(session_id=req.session_id, message=req.message))
@@ -496,3 +634,64 @@ def route_rfp(message: str) -> dict:
     countries = [c for c, places in COUNTRY_PLACES.items() if contains_any(message, places)]
     resp = agent.ask(RFPAskRequest(question=message, country=countries[0] if len(countries) == 1 else None))
     return resp.model_dump(mode="json")
+
+
+DOCUMENT_QUESTIONS = {
+    "doc_type": "Which document type do you need? (course description, proposal, curriculum PDF, participant guide, "
+                "facilitator guide, presentation outline, question bank, rubrics, capstone brief, outcomes and "
+                "assessment plan)",
+    "source": "Which course or curriculum should be used? (a course id such as DS-101, or a curriculum id CUR-...)",
+}
+DOCUMENT_QUESTIONS_AR = {
+    "doc_type": "ما نوع المستند المطلوب؟ (وصف الدورة، عرض تدريبي، المنهج PDF، دليل المتدرب، دليل المدرب، مخطط العرض "
+                "التقديمي، بنك الأسئلة، معايير التقييم، موجز المشروع الختامي، خطة النواتج والتقييم)",
+    "source": "ما الدورة أو المنهج المطلوب؟ (رمز دورة مثل DS-101 أو رقم منهج CUR-...)",
+}
+
+
+def parse_document_message(message: str) -> dict:
+    """'Participant guide for DS-101 in Arabic' -> {doc_type, course_id, language}. Uses stored ids and catalogue
+    titles, so nothing already known is asked again."""
+    import re
+    from rex_ai.agents.curriculum.research import _words
+    from rex_ai.agents.rex.text_utils import detect_language
+    out: dict = {"language": "ar" if re.search(r"\b(arabic)\b|بالعربي|باللغة العربية", message, re.I)
+                 else "en" if re.search(r"\benglish\b|بالإنجليزي|بالانجليزي", message, re.I)
+                 else detect_language(message)}
+    for doc_type, hints in DOC_TYPE_HINTS.items():
+        if contains_any(message, hints):
+            out["doc_type"] = doc_type
+            break
+    if m := re.search(r"\bCUR-[0-9A-F]{8}\b", message, re.I):
+        out["curriculum_id"] = m.group(0).upper()
+    courses = rex().kb.courses
+    if m := re.search(r"\b([A-Z]{2,4}-\d{3})\b", message, re.I):
+        if m.group(1).upper() in courses:
+            out["course_id"] = m.group(1).upper()
+    if not (out.get("course_id") or out.get("curriculum_id")):
+        words = _words(message)
+        best = max(((len(words & _words(f"{c.title_en} {c.title_ar}")), c.course_id) for c in courses.values()),
+                   default=(0, None))
+        if best[0] >= 2:
+            out["course_id"] = best[1]
+    if m := re.search(r"\bfor\s+(?:the\s+)?(.+?)(?:\s+(?:team|staff|department))\b", message, re.I):
+        out["audience"] = m.group(0)[4:].strip()
+    return out
+
+
+def route_document(message: str) -> dict:
+    """Generate a document from chat; asks the brief's discovery questions (§10) for what is missing."""
+    fields = parse_document_message(message)
+    missing = [k for k in ("doc_type", "source") if not (fields.get(k) if k == "doc_type" else
+                                                         fields.get("course_id") or fields.get("curriculum_id"))]
+    if missing:
+        questions = DOCUMENT_QUESTIONS_AR if fields["language"] == "ar" else DOCUMENT_QUESTIONS
+        return {"status": "need_input", "understood": fields, "questions": [questions[k] for k in missing]}
+    try:
+        doc = document_agent().generate(DocumentRequest(**fields))
+    except NotFound as exc:
+        return {"status": "not_found", "message": str(exc)}
+    return {"status": "draft_created", "document_id": doc.document_id, "title": doc.title,
+            "doc_type": doc.doc_type.value, "sections": [s.heading for s in doc.sections if s.level == 1][:15],
+            "notes": doc.metadata.get("notes"), "download_url": doc.download_url,
+            "next": f"Review it: POST /documents/{doc.document_id}/review"}

@@ -1,0 +1,176 @@
+# Document templates for Agent 4 - Educational Content & Document Generation (owner: Member 3).
+#
+# One template per document type (brief, Agent 4 items 26-35). A template fixes the section order and the
+# headings in English and Arabic; rex_ai/agents/documents/builders.py fills each section from the curriculum /
+# catalogue data. Reorder or delete sections here to change every generated document - no code change needed.
+# Add another template for the same type (new template_id, default: false) and pick it with DocumentRequest.template_id.
+#
+# Section flags:
+#   locked: true    facts copied from approved data (hours, fees, schedules, weights). The LLM never rewrites them;
+#                   only a reviewer can edit them.
+#
+# These are SAMPLE templates written by the team until the academy sends its approved reference documents
+# (brief §11). The matching reference examples in references/ are indexed in the shared RAG (collection
+# doc_templates) and given to the LLM as style examples.
+
+_meta:
+  source_id: SRC-DOC-TEMPLATES
+  status: sample
+  last_updated: 2026-10-27
+  pass_mark_pct: 60              # academy policy used in assessment documents (sample - confirm with the academy)
+  attendance_pct: 80
+  # Used only when a document is built from a catalogue course that has no curriculum yet (the catalogue lists no
+  # assessment plan). The document says so; generate and approve a curriculum for the real plan.
+  default_assessments:
+    - {name: {en: Module quizzes, ar: اختبارات قصيرة لكل وحدة}, type: quiz, weight_pct: 20}
+    - {name: {en: Practical assignments and labs, ar: تكليفات ومعامل عملية}, type: assignment, weight_pct: 40}
+    - {name: {en: Capstone project and presentation, ar: المشروع الختامي والعرض}, type: project, weight_pct: 40}
+
+templates:
+  - template_id: TPL-COURSE-DESC-V1
+    doc_type: course_description
+    default: true
+    title: {en: Course Description, ar: وصف الدورة}
+    reader: {en: Prospective learners and sales, ar: المتدربون المحتملون وفريق المبيعات}
+    description: One- to two-page public description of the course for the website, brochures and sales.
+    sections:
+      - {key: overview, heading: {en: Course overview, ar: نظرة عامة على الدورة}}
+      - {key: audience, heading: {en: Who should attend, ar: الفئة المستهدفة}}
+      - {key: prerequisites, heading: {en: Prerequisites, ar: المتطلبات السابقة}}
+      - {key: outcomes, heading: {en: What you will learn, ar: ماذا ستتعلم}}
+      - {key: content_table, heading: {en: Course content, ar: محتوى الدورة}, locked: true}
+      - {key: format, heading: {en: Duration and training format, ar: المدة وأسلوب التدريب}, locked: true}
+      - {key: instructors, heading: {en: Instructors, ar: المدربون}, locked: true}
+      - {key: fees, heading: {en: Fees and current offers, ar: الرسوم والعروض الحالية}, locked: true}
+      - {key: certificate, heading: {en: Certificate, ar: الشهادة}}
+      - {key: careers, heading: {en: Career opportunities, ar: الفرص الوظيفية}}
+
+  - template_id: TPL-PROPOSAL-V1
+    doc_type: course_proposal
+    default: true
+    title: {en: Training Proposal, ar: عرض تدريبي}
+    reader: {en: Client organisation or tender committee, ar: الجهة العميلة أو لجنة المناقصة}
+    description: Proposal to deliver the course for a client organisation (corporate training or tender response).
+    sections:
+      - {key: prepared_for, heading: {en: Prepared for, ar: مقدم إلى}}
+      - {key: executive_summary, heading: {en: Executive summary, ar: الملخص التنفيذي}}
+      - {key: objectives, heading: {en: Training objectives, ar: أهداف التدريب}}
+      - {key: participants, heading: {en: Target participants, ar: المشاركون المستهدفون}}
+      - {key: outcomes, heading: {en: Expected learning outcomes, ar: نواتج التعلم المتوقعة}}
+      - {key: program_table, heading: {en: Proposed programme, ar: البرنامج المقترح}, locked: true}
+      - {key: methodology, heading: {en: Training methodology, ar: منهجية التدريب}}
+      - {key: assessment_table, heading: {en: Assessment and evaluation, ar: التقييم والقياس}, locked: true}
+      - {key: capstone, heading: {en: Capstone project, ar: المشروع الختامي}}
+      - {key: team, heading: {en: Training team, ar: فريق التدريب}, locked: true}
+      - {key: schedule, heading: {en: Schedule and logistics, ar: الجدول الزمني والتنظيم}, locked: true}
+      - {key: investment, heading: {en: Investment, ar: التكلفة}, locked: true}
+      - {key: quality, heading: {en: Quality assurance and framework alignment, ar: ضمان الجودة والمواءمة مع الأطر}}
+      - {key: next_steps, heading: {en: Next steps, ar: الخطوات التالية}}
+
+  - template_id: TPL-CURRICULUM-V1
+    doc_type: curriculum_pdf
+    default: true
+    title: {en: Course Curriculum, ar: المنهج التدريبي}
+    reader: {en: Academic committee and instructors, ar: اللجنة الأكاديمية والمدربون}
+    description: The full curriculum with its metadata table and an alignment summary.
+    sections:
+      - {key: info_table, heading: {en: Course information, ar: معلومات الدورة}, locked: true}
+      - {key: objectives, heading: {en: Course objectives, ar: أهداف الدورة}}
+      - {key: outcomes, heading: {en: Learning outcomes, ar: نواتج التعلم}}
+      - {key: structure_table, heading: {en: Modules, topics and hours, ar: الوحدات والموضوعات والساعات}, locked: true}
+      - {key: exercises, heading: {en: Practical exercises, ar: التمارين العملية}}
+      - {key: assessment_table, heading: {en: Assessment plan, ar: خطة التقييم}, locked: true}
+      - {key: capstone, heading: {en: Capstone project, ar: المشروع الختامي}}
+      - {key: alignment, heading: {en: Accreditation alignment summary, ar: ملخص المواءمة مع أطر الاعتماد}, locked: true}
+
+  - template_id: TPL-PARTICIPANT-V1
+    doc_type: participant_guide
+    default: true
+    title: {en: Participant Guide, ar: دليل المتدرب}
+    reader: {en: Learners, ar: المتدربون}
+    description: Workbook for learners - course at a glance, then one chapter per module with key points, activities and reflection questions.
+    sections:
+      - {key: welcome, heading: {en: Welcome, ar: مرحباً بك}}
+      - {key: glance_table, heading: {en: Course at a glance, ar: الدورة في لمحة}, locked: true}
+      - {key: outcomes, heading: {en: What you will be able to do, ar: ما ستكون قادراً عليه}}
+      - {key: how_assessed, heading: {en: How you will be assessed, ar: كيف سيتم تقييمك}, locked: true}
+      - {key: module_chapters, heading: {en: "Module {n}: {title}", ar: "الوحدة {n}: {title}"}}
+      - {key: capstone, heading: {en: Your capstone project, ar: مشروعك الختامي}}
+      - {key: support, heading: {en: Getting support, ar: الحصول على الدعم}}
+
+  - template_id: TPL-FACILITATOR-V1
+    doc_type: facilitator_guide
+    default: true
+    title: {en: Facilitator Guide, ar: دليل المدرب}
+    reader: {en: Instructors and facilitators, ar: المدربون والميسرون}
+    description: Session plan, preparation checklist and timed facilitation notes for every module.
+    sections:
+      - {key: purpose, heading: {en: Purpose of this guide, ar: الغرض من هذا الدليل}}
+      - {key: facilitators, heading: {en: Facilitator profile, ar: مواصفات المدرب}}
+      - {key: preparation, heading: {en: Preparation checklist, ar: قائمة التحضير}}
+      - {key: session_plan, heading: {en: Session plan, ar: خطة الجلسات}, locked: true}
+      - {key: module_notes, heading: {en: "Module {n}: {title}", ar: "الوحدة {n}: {title}"}}
+      - {key: assessment_admin, heading: {en: Running the assessments, ar: إدارة التقييمات}}
+      - {key: capstone_supervision, heading: {en: Supervising the capstone, ar: الإشراف على المشروع الختامي}}
+
+  - template_id: TPL-SLIDES-V1
+    doc_type: presentation_outline
+    default: true
+    title: {en: Presentation Outline, ar: مخطط العرض التقديمي}
+    reader: {en: Instructors preparing slides, ar: المدربون عند إعداد الشرائح}
+    description: Slide-by-slide outline with bullets and speaker notes, ready to turn into a deck.
+    sections:
+      - {key: slides, heading: {en: "Slide {n}: {title}", ar: "الشريحة {n}: {title}"}}
+
+  - template_id: TPL-QBANK-V1
+    doc_type: question_bank
+    default: true
+    title: {en: Question Bank, ar: بنك الأسئلة}
+    reader: {en: Instructors (confidential - contains answers), ar: المدربون (سري - يحتوي على الإجابات)}
+    description: Questions for every module (multiple choice, true/false, short answer, practical) with answers, linked outcome and cognitive level.
+    sections:
+      - {key: usage, heading: {en: How to use this question bank, ar: كيفية استخدام بنك الأسئلة}}
+      - {key: module_questions, heading: {en: "Module {n}: {title}", ar: "الوحدة {n}: {title}"}}
+      - {key: blueprint, heading: {en: Question blueprint, ar: جدول مواصفات الأسئلة}, locked: true}
+
+  - template_id: TPL-RUBRIC-V1
+    doc_type: assessment_rubric
+    default: true
+    title: {en: Assessment Rubrics, ar: معايير التقييم}
+    reader: {en: Instructors and learners, ar: المدربون والمتدربون}
+    description: One analytic rubric per assessment, with four performance levels and points per criterion.
+    sections:
+      - {key: scale, heading: {en: Performance levels, ar: مستويات الأداء}}
+      - {key: rubrics, heading: {en: "Rubric: {title}", ar: "معايير تقييم: {title}"}}
+      - {key: grading, heading: {en: Grading and pass rules, ar: قواعد الدرجات والنجاح}, locked: true}
+
+  - template_id: TPL-CAPSTONE-V1
+    doc_type: capstone_brief
+    default: true
+    title: {en: Capstone Project Brief, ar: موجز المشروع الختامي}
+    reader: {en: Learners, ar: المتدربون}
+    description: The capstone assignment - scenario, requirements, deliverables, milestones and how it is assessed.
+    sections:
+      - {key: overview, heading: {en: Project overview, ar: نظرة عامة على المشروع}}
+      - {key: outcomes, heading: {en: Learning outcomes addressed, ar: نواتج التعلم المستهدفة}}
+      - {key: scenario, heading: {en: Scenario, ar: سيناريو المشروع}}
+      - {key: requirements, heading: {en: Requirements, ar: المتطلبات}}
+      - {key: deliverables, heading: {en: Deliverables, ar: المخرجات المطلوبة}}
+      - {key: milestones, heading: {en: Milestones, ar: المراحل الزمنية}, locked: true}
+      - {key: assessment, heading: {en: How the project is assessed, ar: كيف يُقيَّم المشروع}, locked: true}
+      - {key: submission, heading: {en: Submission and presentation, ar: التسليم والعرض}}
+      - {key: integrity, heading: {en: Academic integrity and use of AI tools, ar: النزاهة الأكاديمية واستخدام أدوات الذكاء الاصطناعي}}
+
+  - template_id: TPL-OUTCOMES-PLAN-V1
+    doc_type: outcomes_assessment_plan
+    default: true
+    title: {en: Learning Outcomes and Assessment Plan, ar: خطة نواتج التعلم والتقييم}
+    reader: {en: Academic committee and quality team, ar: اللجنة الأكاديمية وفريق الجودة}
+    description: How every learning outcome is taught and assessed - outcome map, assessment weights, pass rules and alignment summary.
+    sections:
+      - {key: intro, heading: {en: Purpose, ar: الغرض}}
+      - {key: outcome_map, heading: {en: Outcome map, ar: خريطة نواتج التعلم}, locked: true}
+      - {key: assessment_table, heading: {en: Assessment methods and weights, ar: أساليب التقييم وأوزانها}, locked: true}
+      - {key: coverage, heading: {en: Outcome coverage check, ar: التحقق من تغطية النواتج}}
+      - {key: grading, heading: {en: Grading and pass rules, ar: قواعد الدرجات والنجاح}, locked: true}
+      - {key: alignment, heading: {en: Framework alignment, ar: المواءمة مع الأطر}, locked: true}
