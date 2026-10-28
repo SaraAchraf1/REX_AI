@@ -45,6 +45,8 @@ _ADDED_COLUMNS = {
     "rfps": {"source_title": "TEXT", "relevance_score": "REAL NOT NULL DEFAULT 0", "matched_course_ids": "TEXT",
              "priority": "TEXT NOT NULL DEFAULT 'normal'", "first_seen": "TEXT"},
     "documents": {"content": "TEXT", "request": "TEXT", "version": "INTEGER NOT NULL DEFAULT 1", "updated_at": "TEXT"},
+    "campaigns": {"content": "TEXT", "document_id": "TEXT", "language": "TEXT", "version": "INTEGER NOT NULL DEFAULT 1",
+                  "updated_at": "TEXT"},
 }
 
 
@@ -504,6 +506,82 @@ def list_documents(doc_type: Optional[str] = None, status: Optional[str] = None,
 def list_document_versions(document_id: str, db_path: Optional[Path] = None) -> list[dict]:
     with connect(db_path) as conn:
         rows = conn.execute("SELECT * FROM document_versions WHERE document_id=? ORDER BY version", (document_id,))
+        return [{**dict(r), "content": json.loads(r["content"])} for r in rows]
+
+
+def lead_interest(course_id: str, db_path: Optional[Path] = None) -> list[dict]:
+    """Profiles of consented leads interested in a course - no names or contact details (Marketing Agent)."""
+    with connect(db_path) as conn:
+        rows = conn.execute("SELECT interested_course_ids, profile, created_at FROM leads "
+                            "WHERE interested_course_ids LIKE ?", (f'%"{course_id}"%',))
+        return [{"profile": json.loads(r["profile"] or "{}"), "created_at": r["created_at"]} for r in rows]
+
+
+# --------------------------------------------------------------------------- #
+# Marketing campaigns (owner: Member 1)
+# --------------------------------------------------------------------------- #
+def save_campaign(camp: dict, request: dict, change_note: Optional[str] = None, changed_by: Optional[str] = None,
+                  db_path: Optional[Path] = None) -> None:
+    """Insert or update a campaign, rewrite its current variants and keep a copy of this version."""
+    now = _now()
+    content = json.dumps(camp, ensure_ascii=False, default=str)
+    with connect(db_path) as conn:
+        conn.execute(
+            """INSERT INTO campaigns (campaign_id, course_id, curriculum_id, request, strategy, course_facts_used,
+                 status, created_at, content, document_id, language, version, updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+               ON CONFLICT(campaign_id) DO UPDATE SET strategy=excluded.strategy,
+                 course_facts_used=excluded.course_facts_used, status=excluded.status, content=excluded.content,
+                 version=excluded.version, updated_at=excluded.updated_at""",
+            (camp["campaign_id"], camp["course_id"], camp.get("curriculum_id"),
+             json.dumps(request, ensure_ascii=False, default=str), camp["strategy"],
+             json.dumps(camp["course_facts_used"], ensure_ascii=False, default=str), camp["status"],
+             camp.get("created_at") or now, content, camp.get("document_id"), camp.get("language"),
+             camp.get("version", 1), now))
+        conn.execute("DELETE FROM campaign_variants WHERE campaign_id=?", (camp["campaign_id"],))
+        conn.executemany("INSERT INTO campaign_variants (campaign_id, channel, variant_no, headline, body, cta) "
+                         "VALUES (?,?,?,?,?,?)",
+                         [(camp["campaign_id"], v["channel"], v["variant_no"], v.get("headline"), v["body"], v["cta"])
+                          for v in camp["variants"]])
+        conn.execute("INSERT OR REPLACE INTO campaign_versions VALUES (?,?,?,?,?,?)",
+                     (camp["campaign_id"], camp.get("version", 1), content, change_note, changed_by, now))
+
+
+def _campaign_row(row: sqlite3.Row) -> dict:
+    r = dict(row)
+    r["content"] = json.loads(r["content"]) if r.get("content") else None
+    r["request"] = json.loads(r["request"]) if r.get("request") else {}
+    return r
+
+
+def get_campaign(campaign_id: str, db_path: Optional[Path] = None) -> Optional[dict]:
+    with connect(db_path) as conn:
+        row = conn.execute("SELECT * FROM campaigns WHERE campaign_id=?", (campaign_id,)).fetchone()
+        return _campaign_row(row) if row else None
+
+
+def list_campaigns(course_id: Optional[str] = None, status: Optional[str] = None, curriculum_id: Optional[str] = None,
+                   language: Optional[str] = None, q: Optional[str] = None, limit: int = 200,
+                   db_path: Optional[Path] = None) -> list[dict]:
+    """Newest first. Rows without content (written before Sprint 2) are skipped."""
+    sql, args = "SELECT * FROM campaigns WHERE content IS NOT NULL", []
+    for col, val in (("course_id", course_id), ("status", status), ("curriculum_id", curriculum_id),
+                     ("language", language)):
+        if val:
+            sql += f" AND {col}=?"
+            args.append(val)
+    if q:
+        sql += " AND (content LIKE ? OR strategy LIKE ?)"
+        args += [f"%{q}%"] * 2
+    sql += " ORDER BY coalesce(updated_at, created_at) DESC, rowid DESC LIMIT ?"
+    args.append(limit)
+    with connect(db_path) as conn:
+        return [_campaign_row(r) for r in conn.execute(sql, args)]
+
+
+def list_campaign_versions(campaign_id: str, db_path: Optional[Path] = None) -> list[dict]:
+    with connect(db_path) as conn:
+        rows = conn.execute("SELECT * FROM campaign_versions WHERE campaign_id=? ORDER BY version", (campaign_id,))
         return [{**dict(r), "content": json.loads(r["content"])} for r in rows]
 
 

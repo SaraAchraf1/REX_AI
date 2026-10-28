@@ -33,7 +33,7 @@ owner whose agent uses that model (see the Owner column).
 | `RFPRecord` | `rfps`, `rfp_alerts` | M2 | title, issuing_organization, country, deadline, eligibility, training_category, submission_link, publication_date, documents, summary, qualification, status, dedupe_hash, source; Sprint 2 adds relevance_score, matched_course_ids, priority, first_seen (existing databases get the columns automatically in `db.init_db`) |
 | `CurriculumRequest`, `Curriculum`, `GapReport`, `GapItem`, `ReviewAction`, `CurriculumRevision`, `CurriculumImport` | `curricula`, `curriculum_versions`, `gap_reports`, `reviews`, `accreditation_standards`, `handoff_events` | M2 | objectives, audience, prerequisites, outcomes, modules, hours, exercises, assessments, capstone, metadata (brief table); coverage_pct, covered / partial / missing items with evidence, missing topics/outcomes, recommendations. Sprint 2 adds optional fields only: `course_id` on the request (the other answers become optional with it), `course_id`, `language`, timestamps on `Curriculum`; `report_id`, `items`, `partial`, `recommendations` on `GapReport` |
 | `DocumentRequest` / `DocumentRecord`, `DocSection`, `DocTable`, `DocumentEdit`, `DocumentEmail`, `DocumentPackRequest`, `DocumentTypeInfo` | `documents`, `document_versions`, `reviews`, `handoff_events` | M3 | doc_type (10 types), course_id or curriculum_id, language, file_path, download_url, status. Sprint 2 adds optional fields only: `instructions` on the request; `version`, `template_id`, `sections` (heading, paragraphs, bullets, table, notes, locked), `metadata` (facts used, generated_by, notes), `reviewer_comments`, `emailed_to`, `updated_at` on the record (existing databases get the new `documents` columns automatically in `db.init_db`) |
-| `CampaignRequest` / `Campaign` | `campaigns`, `campaign_variants` | M1 | channels, objective, offer, cta, variants, course_facts_used, status |
+| `CampaignRequest` / `Campaign`, `ContentVariant`, `CampaignEdit`, `CampaignPublish`, `ChannelInfo` | `campaigns`, `campaign_variants`, `campaign_versions`, `reviews`, `handoff_events` | M1 | channels, objective, offer, cta, variants, course_facts_used, status. Sprint 2 adds optional fields only: `document_id`, `instructions` on the request (course_id upper-cased, at least one channel); `angle`, `hashtags`, `char_count`, `checks`, `generated_by` on a variant; `title`, `curriculum_id`, `document_id`, `language`, `objective`, `target_audience`, `channels`, `headlines`, `ctas`, `strategy_plan`, `version`, `metadata`, `reviewer_comments`, `download_url`, `updated_at` on the campaign (existing databases get the new `campaigns` columns automatically in `db.init_db`) |
 | `JobRun`, `HandoffEvent` | `job_runs`, `handoff_events`, `app_logs` | M3 | agent, status, output_ref, error; from_agent → to_agent with payload_id |
 
 ## 3. Endpoints
@@ -79,8 +79,16 @@ owner whose agent uses that model (see the Owner column).
 | `POST /documents/{id}/email` | Document | `DocumentEmail {to, sender, message}` → `DocumentRecord` (409 unless approved) | Built (Sprint 2) |
 | `GET /documents/{id}/history` | Document | — → `{versions, reviews, handoffs}` | Built (Sprint 2) |
 | `GET /documents/{id}/download` | Document | — → PDF file (DRAFT watermark until approved) | Built (Sprint 2) |
-| `POST /campaigns` | Marketing | `CampaignRequest` → `Campaign` | Sprint 2 (M1) |
-| `POST /campaigns/{id}/review` | Marketing | `ReviewAction` → `Campaign` | Sprint 2 (M1) |
+| `GET /campaigns/channels` | Marketing | — → `ChannelInfo[]` (5 channels, limits, paid/organic) | Built (Sprint 2) |
+| `GET /campaigns/handoffs` | Marketing | — → approved documents and approved curricula ready for a campaign, with campaign counts | Built (Sprint 2) |
+| `POST /campaigns` | Marketing | `CampaignRequest` → `Campaign` (201, pending_approval v1, brief PDF; 404 unknown course / curriculum / document, 400 curriculum of another course) | Built (Sprint 2) |
+| `GET /campaigns?course_id=&status=&curriculum_id=&language=&q=` | Marketing | — → `Campaign[]` | Built (Sprint 2) |
+| `GET /campaigns/{id}` | Marketing | — → `Campaign` (404 if unknown) | Built (Sprint 2) |
+| `PATCH /campaigns/{id}` | Marketing | `CampaignEdit {reviewer, variants, remove_variants, strategy, instructions}` → `Campaign` (version + 1, pending_approval) | Built (Sprint 2) |
+| `POST /campaigns/{id}/review` | Marketing | `ReviewAction` → `Campaign` (409 if the curriculum / document is not approved or the quoted facts changed) | Built (Sprint 2) |
+| `POST /campaigns/{id}/publish` | Marketing | `CampaignPublish {publisher, variant_keys, email_to}` → `Campaign` (409 unless approved and current, 400 unknown variants, 502 e-mail failed) | Built (Sprint 2) |
+| `GET /campaigns/{id}/history` | Marketing | — → `{versions, reviews, publications, handoffs}` | Built (Sprint 2) |
+| `GET /campaigns/{id}/pdf` | Marketing | — → campaign brief PDF (DRAFT watermark until approved) | Built (Sprint 2) |
 
 ### Example: `POST /chat`
 
@@ -125,7 +133,10 @@ Curriculum (M2) --approved--> HandoffEvent --> Document (M3) --approved--> Hando
 2. On `approved`, the orchestrator writes `HandoffEvent {from: curriculum, to: document, payload_type: "curriculum", payload_id}`.
 3. Document Agent builds the requested PDFs from that `curriculum_id` and stores `DocumentRecord`s.
 4. On document approval, a second `HandoffEvent` starts the Marketing Agent with `course_id` + `curriculum_id`.
-   Marketing copy may only use facts listed in `Campaign.course_facts_used` (snapshot of approved data).
+   Marketing copy may only use facts listed in `Campaign.course_facts_used` (snapshot of approved data): every number
+   in the copy is checked against it. The Marketing Agent also picks up approved curricula of catalogue courses
+   directly (`GET /campaigns/handoffs`), following the brief's "Curriculum Approved → Marketing Agent" workflow.
+   A campaign is approved by an administrator and only then published (`POST /campaigns/{id}/publish`).
 5. Every agent call writes a `JobRun` (queued → running → succeeded/failed) for status display and logs.
 
 ## 5. Knowledge base format

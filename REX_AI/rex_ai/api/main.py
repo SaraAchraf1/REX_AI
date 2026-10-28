@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from rex_ai import config
 from rex_ai.agents.curriculum.agent import CurriculumAgent, NotFound
 from rex_ai.agents.documents.agent import DocumentAgent
+from rex_ai.agents.marketing.agent import MarketingAgent
 from rex_ai.agents.rex.assistant import RexAssistant
 from rex_ai.agents.rex.knowledge_base import get_kb
 from rex_ai.agents.rex.text_utils import contains_any
@@ -22,7 +23,8 @@ from rex_ai.agents.rfp import sources as rfp_sources
 from rex_ai.agents.rfp.agent import RFPResearchAgent, row_to_record
 from rex_ai.agents.rfp.taxonomy import COUNTRY_PLACES
 from rex_ai.core import data_sync, db
-from rex_ai.core.schemas import (AgentName, ApprovalStatus, ChatRequest, ChatResponse, Country, Course, Curriculum,
+from rex_ai.core.schemas import (AgentName, ApprovalStatus, Campaign, CampaignEdit, CampaignPublish, CampaignRequest,
+                                 Channel, ChannelInfo, ChatRequest, ChatResponse, Country, Course, Curriculum,
                                  CurriculumImport, CurriculumRequest, CurriculumResearch, CurriculumRevision,
                                  DocumentEdit, DocumentEmail, DocumentPackRequest, DocumentRecord, DocumentRequest,
                                  DocumentType, DocumentTypeInfo, ErrorResponse, FrameworkInfo, GapReport, GapReportRequest, Lead, LeadCreate, RAGHit,
@@ -523,6 +525,119 @@ def document_download(document_id: str):
     return FileResponse(path, media_type="application/pdf", filename=path.name)
 
 
+# ------------------------------------------------------------ AI Marketing (Agent 5)
+def marketing_agent() -> MarketingAgent:
+    rex()                                # DB initialised, catalogue loaded, academy_kb indexed (FAQs)
+    return MarketingAgent()
+
+
+@app.get("/campaigns/channels", response_model=list[ChannelInfo], tags=["Marketing"])
+def campaign_channels() -> list[ChannelInfo]:
+    """The 5 channels with their length limits and role (data/marketing/channels.yaml)."""
+    return MarketingAgent.channels()
+
+
+@app.get("/campaigns/handoffs", tags=["Marketing"])
+def campaign_handoffs() -> list[dict]:
+    """Approved documents (Document Agent) and approved curricula (Curriculum Agent) ready for a campaign, with the
+    campaigns already made from them."""
+    return marketing_agent().pending_handoffs()
+
+
+@app.post("/campaigns", response_model=Campaign, status_code=201, tags=["Marketing"],
+          responses={404: {"model": ErrorResponse}, 400: {"model": ErrorResponse}})
+def campaign_generate(req: CampaignRequest):
+    """Generate a multi-channel campaign from approved course data: strategy (audience, channel mix, budget split,
+    timeline, KPIs, A/B tests) and N variations per channel, every number checked against the data. Stored as
+    pending_approval - nothing is published before an administrator approves it."""
+    try:
+        return marketing_agent().generate(req)
+    except NotFound as exc:
+        return _error(404, "not_found", str(exc))
+    except ValueError as exc:
+        return _error(400, "invalid_request", str(exc))
+
+
+@app.get("/campaigns", response_model=list[Campaign], tags=["Marketing"])
+def campaign_list(course_id: str | None = None, status: ApprovalStatus | None = None,
+                  curriculum_id: str | None = None, language: str | None = None,
+                  q: str | None = None) -> list[Campaign]:
+    return marketing_agent().search(course_id=course_id and course_id.upper(), status=status and status.value,
+                                    curriculum_id=curriculum_id, language=language, q=q)
+
+
+@app.get("/campaigns/{campaign_id}", response_model=Campaign, tags=["Marketing"],
+         responses={404: {"model": ErrorResponse}})
+def campaign_get(campaign_id: str):
+    try:
+        return marketing_agent().get(campaign_id)
+    except NotFound as exc:
+        return _error(404, "not_found", str(exc))
+
+
+@app.patch("/campaigns/{campaign_id}", response_model=Campaign, tags=["Marketing"],
+           responses={404: {"model": ErrorResponse}})
+def campaign_edit(campaign_id: str, edit: CampaignEdit):
+    """Reviewer edits: replace variants (by channel + variant_no) or add new ones, remove variants ("email:2" or a
+    whole channel), change the strategy, or give plain-language instructions (LLM). New version, pending_approval;
+    metadata.last_edit lists what was applied and what was not."""
+    try:
+        return marketing_agent().edit(campaign_id, edit)
+    except NotFound as exc:
+        return _error(404, "not_found", str(exc))
+
+
+@app.post("/campaigns/{campaign_id}/review", response_model=Campaign, tags=["Marketing"],
+          responses={404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}})
+def campaign_review(campaign_id: str, action: ReviewAction):
+    """approved (only if its curriculum / document are approved and unchanged and the fees, offers and dates it quotes
+    are still current), changes_requested, rejected, or pending_approval to resubmit."""
+    try:
+        return marketing_agent().review(campaign_id, action)
+    except NotFound as exc:
+        return _error(404, "not_found", str(exc))
+    except ValueError as exc:
+        return _error(409, "invalid_transition", str(exc))
+
+
+@app.post("/campaigns/{campaign_id}/publish", response_model=Campaign, tags=["Marketing"],
+          responses={404: {"model": ErrorResponse}, 400: {"model": ErrorResponse}, 409: {"model": ErrorResponse},
+                     502: {"model": ErrorResponse}})
+def campaign_publish(campaign_id: str, req: CampaignPublish):
+    """Release an APPROVED campaign: writes the distribution package (JSON, CSV, one text file per variant) and
+    e-mails the e-mail variant to consented recipients (SMTP, else outputs/campaigns/outbox/)."""
+    try:
+        return marketing_agent().publish(campaign_id, req)
+    except NotFound as exc:
+        return _error(404, "not_found", str(exc))
+    except LookupError as exc:
+        return _error(400, "bad_variants", str(exc))
+    except ValueError as exc:
+        return _error(409, "not_approved", str(exc))
+    except RuntimeError as exc:
+        return _error(502, "email_failed", str(exc))
+
+
+@app.get("/campaigns/{campaign_id}/history", tags=["Marketing"], responses={404: {"model": ErrorResponse}})
+def campaign_history(campaign_id: str):
+    """Versions, review decisions, publications and the document handoff it came from."""
+    try:
+        return marketing_agent().history(campaign_id)
+    except NotFound as exc:
+        return _error(404, "not_found", str(exc))
+
+
+@app.get("/campaigns/{campaign_id}/pdf", tags=["Marketing"], response_class=FileResponse,
+         responses={404: {"model": ErrorResponse}})
+def campaign_pdf(campaign_id: str):
+    """Campaign brief PDF for the review (DRAFT watermark until approved)."""
+    try:
+        path = marketing_agent().pdf(campaign_id)
+    except NotFound as exc:
+        return _error(404, "not_found", str(exc))
+    return FileResponse(path, media_type="application/pdf", filename=path.name)
+
+
 # ---------------------------------------------------------- Orchestrator
 DOC_TYPE_HINTS = {
     "course_description": ["course description", "course brochure", "وصف الدورة", "وصف دورة"],
@@ -537,13 +652,16 @@ DOC_TYPE_HINTS = {
     "capstone_brief": ["capstone brief", "project brief", "موجز المشروع"],
     "outcomes_assessment_plan": ["assessment plan", "outcomes plan", "خطة التقييم", "خطة نواتج التعلم"],
 }
-# Order matters: a document request often names its curriculum ("participant guide for curriculum CUR-..."),
-# so document types are checked before the curriculum keywords.
+# Order matters: a document or campaign request often names its curriculum ("participant guide for curriculum
+# CUR-...", "campaign for curriculum CUR-..."), so both are checked before the curriculum keywords.
 ROUTING_HINTS = {
     AgentName.rfp_research: ["tender", "rfp", "rfq", "مناقصه", "مناقصة", "مناقصات", "منافسة", "منافسات"],
     AgentName.document: ["pdf"] + [h for hints in DOC_TYPE_HINTS.values() for h in hints],
+    # Requests only: not bare "marketing", "offer" or "ad" - a lead asking about the Digital Marketing course, current
+    # offers or "your Facebook ad" stays with REX
+    AgentName.marketing: ["campaign", "ad copy", "linkedin post", "caption", "whatsapp message", "حمله", "حملة",
+                          "promote", "marketing content", "marketing copy", "marketing email", "ترويج", "روّج"],
     AgentName.curriculum: ["curriculum", "syllabus design", "accreditation", "منهج", "اعتماد"],
-    AgentName.marketing: ["campaign", "ad copy", "linkedin post", "caption", "whatsapp message", "حمله"],
 }
 
 
@@ -561,8 +679,8 @@ def route(req: RouteRequest) -> RouteResponse:
             if agent == AgentName.document:
                 return RouteResponse(agent=agent, intent="document_generation", confidence=0.7,
                                      result=route_document(req.message))
-            return RouteResponse(agent=agent, intent=agent.value, confidence=0.6,
-                                 result={"status": "not_implemented", "available_in": "Sprint 2"})
+            return RouteResponse(agent=agent, intent="campaign_generation", confidence=0.7,
+                                 result=route_marketing(req.message))
     resp = rex().handle(ChatRequest(session_id=req.session_id, message=req.message))
     return RouteResponse(agent=AgentName.rex_assistant, intent=resp.intent, confidence=0.8,
                          result=resp.model_dump(mode="json"))
@@ -695,3 +813,94 @@ def route_document(message: str) -> dict:
             "doc_type": doc.doc_type.value, "sections": [s.heading for s in doc.sections if s.level == 1][:15],
             "notes": doc.metadata.get("notes"), "download_url": doc.download_url,
             "next": f"Review it: POST /documents/{doc.document_id}/review"}
+
+
+MARKETING_QUESTIONS = {
+    "course_id": "Which course are we promoting? (a course id such as DS-101, or its title)",
+}
+MARKETING_QUESTIONS_AR = {
+    "course_id": "ما الدورة التي نروّج لها؟ (رمز دورة مثل DS-101 أو اسمها)",
+}
+# Asked as follow-ups when not given (brief §10); sensible defaults are used meanwhile and reported as "assumed"
+MARKETING_DEFAULTS = {
+    "target_audience": "the course's target audience from the catalogue",
+    "channels": "all five channels",
+    "objective": "registrations",
+    "budget": "no paid budget given",
+    "offer / cta": "the current promotion and the objective's call to action",
+}
+CHANNEL_HINTS = {
+    Channel.social_caption: ["caption", "social media post", "instagram post", "facebook post", "منشور", "بوست"],
+    Channel.facebook_instagram_ad: ["facebook ad", "instagram ad", "meta ad", "ad copy", "ads", "إعلان", "اعلان"],
+    Channel.linkedin_post: ["linkedin", "لينكد"],
+    Channel.email: ["email", "e-mail", "newsletter", "بريد", "ايميل", "إيميل"],
+    Channel.whatsapp: ["whatsapp", "واتساب", "واتس"],
+}
+OBJECTIVE_HINTS = {"awareness": ["awareness", "reach", "brand", "الوعي", "انتشار"],
+                   "webinar sign-ups": ["webinar", "info session", "ندوة", "جلسة تعريفية"],
+                   "leads": ["leads", "lead generation", "inquiries", "عملاء محتملين"],
+                   "registrations": ["registration", "enrol", "enroll", "sign up", "تسجيل"]}
+
+
+def parse_marketing_message(message: str) -> dict:
+    """'LinkedIn post and WhatsApp message to promote DS-101 for fresh graduates, budget 5000 EGP' -> request fields.
+    Uses stored course ids and catalogue titles, so nothing already known is asked again."""
+    import re
+    from rex_ai.agents.curriculum.research import _words
+    from rex_ai.agents.rex.text_utils import detect_language
+    out: dict = {"language": "ar" if re.search(r"\barabic\b|بالعربي|باللغة العربية", message, re.I)
+                 else "en" if re.search(r"\benglish\b|بالإنجليزي|بالانجليزي", message, re.I)
+                 else detect_language(message)}
+    courses = rex().kb.courses
+    if m := re.search(r"\b([A-Z]{2,4}-\d{3})\b", message, re.I):
+        if m.group(1).upper() in courses:
+            out["course_id"] = m.group(1).upper()
+    if m := re.search(r"\bCUR-[0-9A-F]{8}\b", message, re.I):
+        out["curriculum_id"] = m.group(0).upper()
+        row = db.get_curriculum(out["curriculum_id"])
+        if row and row.get("course_id") and "course_id" not in out:
+            out["course_id"] = row["course_id"].upper()
+    if "course_id" not in out:
+        words = _words(message)
+        best = max(((len(words & _words(f"{c.title_en} {c.title_ar}")), c.course_id) for c in courses.values()),
+                   default=(0, None))
+        if best[0] >= 2:
+            out["course_id"] = best[1]
+    channels = [ch.value for ch, hints in CHANNEL_HINTS.items() if contains_any(message, hints)]
+    if channels:
+        out["channels"] = channels
+    for objective, hints in OBJECTIVE_HINTS.items():
+        if contains_any(message, hints):
+            out["objective"] = objective
+            break
+    if m := re.search(r"budget\s*(?:of|:)?\s*([\d,]+)|([\d,]+)\s*(?:egp|sar|جنيه|ريال)|ميزانية\s*([\d,]+)", message, re.I):
+        out["budget"] = float(next(g for g in m.groups() if g).replace(",", ""))
+    if m := re.search(r"\b(?:for|targeting|aimed at)\s+(?!the\s+course\b|[A-Z]{2,4}-\d{3}\b|CUR-)(.+?)"
+                      r"(?=,|\.|;|\s+(?:with|budget|in\s+arabic|in\s+english|on\s+(?:linkedin|facebook|instagram|"
+                      r"whatsapp))\b|$)", message, re.I):
+        out["target_audience"] = m.group(1).strip()
+    if m := re.search(r"(\d)\s*(?:variations?|variants?|versions?)", message, re.I):
+        out["variations_per_channel"] = max(1, min(5, int(m.group(1))))
+    return out
+
+
+def route_marketing(message: str) -> dict:
+    """Generate a campaign from chat. Only the course is required; the brief's other questions (§10) get defaults that
+    are reported back, so the admin can refine them in the Marketing page or with POST /campaigns."""
+    fields = parse_marketing_message(message)
+    if not fields.get("course_id"):
+        questions = MARKETING_QUESTIONS_AR if fields["language"] == "ar" else MARKETING_QUESTIONS
+        return {"status": "need_input", "understood": fields, "questions": list(questions.values())}
+    assumed = {k: v for k, v in MARKETING_DEFAULTS.items()
+               if not any(f in fields for f in k.replace(" / ", " ").split())}
+    try:
+        camp = marketing_agent().generate(CampaignRequest(**fields))
+    except NotFound as exc:
+        return {"status": "not_found", "message": str(exc)}
+    except ValueError as exc:
+        return {"status": "invalid_request", "message": str(exc)}
+    return {"status": "pending_approval", "campaign_id": camp.campaign_id, "title": camp.title,
+            "audience": camp.strategy_plan["audience"]["persona_en"], "channels": [c.value for c in camp.channels],
+            "variants": len(camp.variants), "headlines": camp.headlines, "strategy": camp.strategy,
+            "assumed": assumed, "notes": camp.metadata.get("notes"), "download_url": camp.download_url,
+            "next": f"An administrator reviews it: POST /campaigns/{camp.campaign_id}/review"}

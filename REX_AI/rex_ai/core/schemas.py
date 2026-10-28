@@ -681,6 +681,9 @@ class Channel(str, Enum):
 
 
 class CampaignRequest(BaseModel):
+    """The brief's discovery questions (§10): course, audience, platforms, objective, budget, offer and CTA.
+    Only the course is required; everything else comes from stored data (audience, offer from current promotions,
+    CTA from the objective) instead of being asked again."""
     course_id: str
     curriculum_id: Optional[str] = None
     target_audience: Optional[str] = None
@@ -688,9 +691,25 @@ class CampaignRequest(BaseModel):
     objective: str = Field("registrations", examples=["registrations", "awareness", "webinar sign-ups"])
     offer: Optional[str] = None
     cta: Optional[str] = None
-    budget: Optional[float] = None
+    budget: Optional[float] = Field(None, ge=0)
     variations_per_channel: int = Field(2, ge=1, le=5)
     language: Language = Language.en
+    # Sprint 2 additions (optional, backwards compatible)
+    document_id: Optional[str] = Field(None, description="Approved document handed over by the Document Agent")
+    instructions: Optional[str] = Field(None, max_length=2000, description="Extra wishes for the LLM, e.g. "
+                                        "'mention the weekend cohort'")
+
+    @field_validator("course_id")
+    @classmethod
+    def _upper(cls, v: str) -> str:
+        return v.strip().upper()
+
+    @field_validator("channels")
+    @classmethod
+    def _channels(cls, v: list[Channel]) -> list[Channel]:
+        if not v:
+            raise ValueError("Choose at least one channel")
+        return list(dict.fromkeys(v))
 
 
 class ContentVariant(BaseModel):
@@ -699,6 +718,16 @@ class ContentVariant(BaseModel):
     headline: Optional[str] = None
     body: str
     cta: str
+    # Sprint 2 additions (optional, backwards compatible)
+    angle: Optional[str] = Field(None, examples=["outcome", "career", "offer", "expert", "question"])
+    hashtags: list[str] = Field(default_factory=list)
+    char_count: int = 0
+    checks: list[str] = Field(default_factory=list, description="Fact / claim / length checks for the reviewer")
+    generated_by: str = "rules"
+
+    @property
+    def key(self) -> str:
+        return f"{self.channel.value}:{self.variant_no}"
 
 
 class Campaign(BaseModel):
@@ -710,6 +739,59 @@ class Campaign(BaseModel):
     status: ApprovalStatus = ApprovalStatus.pending_approval  # never published without approval
     sources: list[SourceRef] = Field(default_factory=list)
     created_at: datetime
+    # Sprint 2 additions (optional, backwards compatible)
+    title: Optional[str] = None
+    curriculum_id: Optional[str] = None
+    document_id: Optional[str] = None
+    language: Language = Language.en
+    objective: Optional[str] = None
+    target_audience: Optional[str] = None
+    channels: list[Channel] = Field(default_factory=list)
+    headlines: list[str] = Field(default_factory=list, description="Campaign headline options")
+    ctas: list[str] = Field(default_factory=list, description="Call-to-action options")
+    strategy_plan: dict[str, Any] = Field(default_factory=dict, description="audience, channel mix, budget split, "
+                                          "timeline, key messages, KPIs, A/B tests, compliance")
+    version: int = 1
+    metadata: dict[str, Any] = Field(default_factory=dict, description="generated_by, notes, approvals, "
+                                     "publications")
+    reviewer_comments: list[str] = Field(default_factory=list)
+    download_url: Optional[str] = None
+    updated_at: Optional[datetime] = None
+
+
+class CampaignEdit(BaseModel):
+    """A reviewer's changes: edited variants (matched by channel + variant_no; a new number is added), variants to
+    remove ("linkedin_post:2"), a new strategy text, and/or plain-language instructions applied by the LLM."""
+    reviewer: str = Field(..., min_length=1)
+    variants: list[ContentVariant] = Field(default_factory=list)
+    remove_variants: list[str] = Field(default_factory=list, examples=[["whatsapp:2"]])
+    strategy: Optional[str] = None
+    instructions: Optional[str] = Field(None, max_length=4000)
+
+    @model_validator(mode="after")
+    def _need_change(self) -> "CampaignEdit":
+        if not (self.variants or self.remove_variants or self.strategy or self.instructions):
+            raise ValueError("Give edited variants, variants to remove, a strategy or instructions")
+        return self
+
+
+class CampaignPublish(BaseModel):
+    """Release an APPROVED campaign for distribution. variant_keys picks the variants to publish (default: every
+    variant); email_to sends the e-mail variant to consented recipients (SMTP, else an .eml in the outbox)."""
+    publisher: str = Field(..., min_length=1)
+    variant_keys: list[str] = Field(default_factory=list, examples=[["linkedin_post:1", "email:2"]])
+    email_to: list[EmailStr] = Field(default_factory=list)
+
+
+class ChannelInfo(BaseModel):
+    channel: Channel
+    name: str
+    name_ar: str
+    role: str
+    headline_max: int
+    body_max: int
+    hashtags: int
+    paid: bool
 
 
 # --------------------------------------------------------------------------- #

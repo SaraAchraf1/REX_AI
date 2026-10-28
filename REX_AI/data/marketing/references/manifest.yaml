@@ -1,0 +1,16 @@
+# Reference material for the Marketing Agent. Each file is indexed in the shared RAG collection "marketing_refs"
+# with the metadata below. The agent retrieves the passages for the channels it writes (brand rules, channel
+# playbook, approved examples), gives them to the LLM as house style and cites them as sources.
+# SAMPLE material written by the team: replace it with the academy's brand guide and approved campaigns
+# (PDF, Word or Markdown all work - add a line here).
+
+defaults:
+  source_id: SRC-MKT-GUIDE
+  status: sample
+  update_date: 2026-10-27
+
+files:
+  brand_voice_guide.md: {kind: brand_guide, language: en}
+  channel_playbook.md: {kind: channel_playbook, language: en}
+  campaign_example_en.md: {kind: example, language: en}
+  campaign_example_ar.md: {kind: example, language: ar}

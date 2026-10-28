@@ -58,3 +58,7 @@ PDF_FONT_BOLD = os.getenv("REX_PDF_FONT_BOLD", "")
 # ---- Document Generation Agent (rex_ai/agents/documents) ---------------------
 DOC_TEMPLATES_DIR = Path(os.getenv("REX_DOC_TEMPLATES_DIR", DATA_DIR / "doc_templates"))
 DOCUMENT_OUTPUT_DIR = Path(os.getenv("REX_DOCUMENT_OUTPUT_DIR", ROOT_DIR / "outputs" / "documents"))
+# ---- AI Marketing Agent (rex_ai/agents/marketing) -----------------------------
+MARKETING_DIR = Path(os.getenv("REX_MARKETING_DIR", DATA_DIR / "marketing"))
+# campaign brief PDFs, and publish packages in <id>/ (+ outbox/ for e-mails when SMTP is not set)
+MARKETING_OUTPUT_DIR = Path(os.getenv("REX_MARKETING_OUTPUT_DIR", ROOT_DIR / "outputs" / "campaigns"))

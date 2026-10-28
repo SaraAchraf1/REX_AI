@@ -9,7 +9,7 @@ specialized agents behind one orchestrator:
 | 2 | Tender / RFP Research (Egypt + Saudi Arabia only) | Member 2 | **Sprint 2 working** (see below) |
 | 3 | Curriculum & Accreditation Alignment | Member 2 | **Sprint 2 working** (see below) |
 | 4 | Educational Content & Document Generation | Member 3 | **Sprint 2 working** (see below) |
-| 5 | AI Marketing | Member 1 | Contract defined, Sprint 2 |
+| 5 | AI Marketing | Member 1 | **Sprint 2 working** (see below) |
 | — | Orchestrator, API, app shell, integration | Member 3 | Keyword router + API live |
 
 > **Data notice:** everything in `data/` is **sample data** created by the team for the prototype
@@ -50,6 +50,7 @@ dates still come only from the data files. Without a key REX uses its determinis
 data/                       sample academy data + data_sources.yaml (all approved/candidate sources)
   curriculum/               frameworks, industry skills and reference syllabi for the Curriculum Agent
   doc_templates/            document templates (10 types, EN/AR) + reference examples for the Document Agent
+  marketing/                channel rules, audience personas, brand guide / playbook / example campaigns (Marketing Agent)
   courses.json  instructors.json  pricing_promotions.json  schedules.json  faqs.json  admission_requirements.json
 docs/interfaces.md          data model, endpoints, agent handoff contract  <- read before coding
 rex_ai/
@@ -61,9 +62,10 @@ rex_ai/
   agents/rfp/               RFP & Tender Research Agent
   agents/curriculum/        Curriculum & Accreditation Alignment Agent
   agents/documents/         Educational Content & Document Generation Agent
+  agents/marketing/         AI Marketing Agent
   api/main.py               FastAPI app (+ orchestrator stub)
 frontend/streamlit_app.py   chat UI
-frontend/pages/              RFP Research, Curriculum and Documents pages of the same app
+frontend/pages/              RFP Research, Curriculum, Documents and Marketing pages of the same app
 scripts/build_kb.py         validates data, writes data/kb/kb_chunks.jsonl for a vector store
 tests/                      knowledge base, recommender and API tests
 ```
@@ -285,3 +287,58 @@ style messages here and asks the brief's questions (document type, course or cur
 Rule-made question-bank items check the course structure and outcomes (plus practical items from the reference
 syllabi); with the LLM enabled they are rewritten as content questions. Either way an instructor reviews them before
 use, and the document says who wrote them.
+
+## Agent 5 — AI Marketing (Sprint 2)
+
+Generates a multi-channel campaign for a course from approved data only, with a simple strategy, and holds it until
+an administrator approves it. Code: `rex_ai/agents/marketing/`, UI: the **Marketing** page of the Streamlit app.
+Works without an LLM; with `OPENAI_API_KEY` set, the LLM rewrites the copy in the house style and the same checks are
+applied to what it returns.
+
+```
+course (+ curriculum / approved document) ──> approved facts ─────────────────────────────> audience persona
+ audience, channels, objective,               catalogue · approved curriculum (Agent 3)      (pains, tone, channels,
+ offer, CTA, budget, variations, language      fees · offer for this audience · cohorts       targeting; consented-
+                                              instructors · FAQs via RAG academy_kb · leads   lead insights)
+    ──> copy per channel × variation (angles) ──> fact / claim / length checks ──> strategy ──> LLM rewrite (optional,
+        captions · ads · LinkedIn · e-mail ·      every number must be in the      mix, budget,  RAG marketing_refs,
+        WhatsApp · headlines · CTAs               facts; no accreditation / job    timeline,     checked again)
+                                                  guarantees; opt-out lines        KPIs, A/B
+    ──> pending_approval v1 + brief PDF ──> admin: approved / changes_requested / rejected ──> publish (package, e-mail)
+```
+
+| Brief requirement | Where |
+| --- | --- |
+| 36 Read approved course details | `facts.py`: catalogue course, fees, installments, upcoming cohorts and seats, instructors; snapshot stored in `Campaign.course_facts_used` |
+| 37 Understand the target audience | `audience.py` + `data/marketing/audiences.yaml`: 6 personas (students, career switchers, professionals, managers, companies, entrepreneurs) matched from the request or the course audience, plus what consented REX leads asked (counts and goals only, no personal data) |
+| 38 Captions, Facebook/Instagram ads, LinkedIn posts, e-mails, WhatsApp, headlines, CTAs | `writer.py` (EN/AR) within each channel's limits in `data/marketing/channels.yaml`; ads use a real Meta CTA button; e-mail and WhatsApp always keep an opt-out line; `Campaign.headlines`, `Campaign.ctas` |
+| 39 Simple campaign strategy | `strategy.py`: objective → funnel and KPIs, channel priority from the persona, budget split over paid channels, dated timeline back from the next cohort (launch, nurture, last call, offer deadline), A/B tests, objection handling from the academy FAQs (RAG `academy_kb`), compliance; also the campaign brief PDF (`pdf.py`) |
+| 40 Multiple variations | `variations_per_channel` (1-5); each variation takes a different angle (outcome, career, offer, expert, pain-point question) chosen for the persona, so they can be A/B tested |
+| 41 Connect with the Curriculum Agent | the course's newest **approved** curriculum (or the requested one) supplies outcomes, modules and hours; an approved document handed over by the Document Agent can start a campaign (`document_id`); approval is refused while that curriculum is not approved or has changed |
+| 42 Manual approval before sending / publishing | campaigns are created `pending_approval`; `POST /campaigns/{id}/review`; only approved campaigns can be published, and only while the fees, offer and dates they quote are still current; an edit makes a new version that needs approval again |
+| Example workflow (brief) | Curriculum approved → `GET /campaigns/handoffs` lists it (and approved documents) → generate → admin reviews → `POST /campaigns/{id}/publish` writes the distribution package (`campaign.json`, `content.csv`, one text file per variant) and e-mails the e-mail variant (SMTP or `outputs/campaigns/outbox/`) |
+| Traceability, no invented facts | every number in the copy must appear in the facts or in what the admin typed (offer, CTA) — LLM copy that fails is rejected, a reviewer's own edits are flagged; claim guard for accreditation, job/pass guarantees and "best academy" superlatives; sources on every campaign |
+
+Offers are chosen for the audience: a student discount is never the headline of a campaign for managers, and an offer
+that must be paid "3 weeks before the cohort starts" is advertised only until that date (or not at all when it has
+passed). The RAG collection `marketing_refs` holds `data/marketing/references/` (brand voice guide, channel playbook,
+example campaigns in English and Arabic): the strategy shows each channel's playbook section, the LLM gets the
+passages as house style, and both are cited.
+
+```bash
+python scripts/run_marketing.py --channels                                   # channels and their limits
+python scripts/run_marketing.py --course DS-101 --budget 5000 --full          # all channels, 2 variations
+python scripts/run_marketing.py --course BU-101 --audience "Project managers" --channel linkedin_post --channel email
+python scripts/run_marketing.py --course DS-101 --language ar --channel whatsapp --full     # Arabic
+python scripts/run_marketing.py --approve CMP-XXXX --reviewer Admin
+python scripts/run_marketing.py --publish CMP-XXXX --reviewer Admin --variant email:1 --to lead@example.com
+pytest -q tests/test_marketing_agent.py                                      # 37 test cases
+```
+
+Endpoints: `GET /campaigns/channels`, `GET /campaigns/handoffs`, `POST /campaigns`, `GET /campaigns` (filters
+course_id, status, curriculum_id, language, q), `GET /campaigns/{id}`, `PATCH /campaigns/{id}`,
+`POST /campaigns/{id}/review`, `POST /campaigns/{id}/publish`, `GET /campaigns/{id}/history`,
+`GET /campaigns/{id}/pdf`. `POST /route` sends "LinkedIn post and WhatsApp message to promote DS-101 for fresh
+graduates, budget 3000 EGP" style messages here; only the course is required, the other §10 questions get defaults
+that are reported back as `assumed`. Channel rules, personas and the brand guide are team-made SAMPLE data — replace
+them with the academy's own.

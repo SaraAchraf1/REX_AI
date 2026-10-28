@@ -84,6 +84,36 @@ internal:
     access: file
     status: sample
     note: Applied to every curriculum by the Curriculum Agent; to be approved by the academy.
+  - source_id: SRC-MKT-GUIDE
+    name: Brand voice guide, channel playbook and example campaigns written by the team
+    owner: Member 1
+    used_by: [marketing]
+    location: data/marketing/references/
+    access: file
+    status: sample
+    note: Indexed in the RAG collection marketing_refs (metadata kind, language). Replace with the academy's brand guide.
+  - source_id: SRC-MKT-CHANNELS
+    name: Channel rules (length limits, hashtags, CTA buttons) and objective defaults (CTA, KPIs)
+    owner: Member 1
+    used_by: [marketing]
+    location: data/marketing/channels.yaml
+    access: file
+    status: sample
+  - source_id: SRC-MKT-AUDIENCES
+    name: Audience personas (pains, motivations, preferred channels, targeting suggestions)
+    owner: Member 1
+    used_by: [marketing]
+    location: data/marketing/audiences.yaml
+    access: file
+    status: sample
+  - source_id: SRC-REX-LEADS
+    name: Consented leads captured by the REX Assistant (aggregated, no personal data leaves the database)
+    owner: Member 1
+    used_by: [marketing]
+    location: rex_ai.db (table leads)
+    access: file
+    status: approved
+    note: The Marketing Agent reads only counts and common goals/levels of leads interested in a course.
 
 tenders:
   # Geographic scope is Egypt + Saudi Arabia ONLY (brief, Agent 2 strict rule).

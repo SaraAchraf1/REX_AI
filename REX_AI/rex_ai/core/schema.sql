@@ -272,9 +272,16 @@ CREATE TABLE IF NOT EXISTS campaigns (
     strategy          TEXT,
     course_facts_used TEXT NOT NULL,                -- JSON snapshot of approved facts
     status            TEXT NOT NULL DEFAULT 'pending_approval',
-    created_at        TEXT NOT NULL
+    created_at        TEXT NOT NULL,
+    content           TEXT,                         -- JSON Campaign (variants, strategy plan, metadata) - Sprint 2
+    document_id       TEXT,
+    language          TEXT,
+    version           INTEGER NOT NULL DEFAULT 1,
+    updated_at        TEXT
 );
+CREATE INDEX IF NOT EXISTS idx_campaigns_filters ON campaigns(course_id, status);
 
+-- Current variants of each campaign (rewritten on every save; full history in campaign_versions)
 CREATE TABLE IF NOT EXISTS campaign_variants (
     variant_id   INTEGER PRIMARY KEY AUTOINCREMENT,
     campaign_id  TEXT NOT NULL REFERENCES campaigns(campaign_id) ON DELETE CASCADE,
@@ -283,6 +290,17 @@ CREATE TABLE IF NOT EXISTS campaign_variants (
     headline     TEXT,
     body         TEXT NOT NULL,
     cta          TEXT NOT NULL
+);
+
+-- Every saved version of a campaign (generation, reviewer edits, decisions) - nothing is overwritten
+CREATE TABLE IF NOT EXISTS campaign_versions (
+    campaign_id  TEXT NOT NULL REFERENCES campaigns(campaign_id) ON DELETE CASCADE,
+    version      INTEGER NOT NULL,
+    content      TEXT NOT NULL,                     -- JSON Campaign
+    change_note  TEXT,
+    changed_by   TEXT,
+    created_at   TEXT NOT NULL,
+    PRIMARY KEY (campaign_id, version)
 );
 
 -- ----------------------------------------------------------------------------
