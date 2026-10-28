@@ -1,0 +1,71 @@
+# Audience personas for the Marketing Agent (brief, Agent 5 item 37 "understand the intended target audience").
+# A campaign's audience text (from the request, else the course's target_audience) is matched to the persona with
+# the most shared keywords. SAMPLE personas written by the team - refine them with the academy's own lead data.
+_meta:
+  source_id: SRC-MKT-AUDIENCES
+  status: sample
+  update_date: 2026-10-27
+
+personas:
+  - persona_id: students
+    name: {en: Students and fresh graduates, ar: الطلاب وحديثو التخرج}
+    keywords: [student, students, graduate, graduates, fresh, university, undergraduate, beginner, beginners, career starter, طالب, طلاب, خريج, خريجين, حديثي التخرج]
+    pains: {en: [No work experience on the CV, Not sure which skills employers want, Limited budget],
+            ar: [لا توجد خبرة عملية في السيرة الذاتية, عدم معرفة المهارات التي يطلبها سوق العمل, ميزانية محدودة]}
+    motivations: {en: [First job, A portfolio project to show employers, Affordable price or student discount],
+                  ar: [الحصول على أول وظيفة, مشروع عملي يُعرض على أصحاب العمل, سعر مناسب أو خصم للطلاب]}
+    channels: [social_caption, facebook_instagram_ad, whatsapp]
+    tone: {en: energetic, friendly and practical, ar: حماسي وودود وعملي}
+    targeting: {meta_interests: [University students, Career development, Online learning], linkedin_titles: [Intern, Graduate, Student], age: "18-26"}
+  - persona_id: career_switchers
+    name: {en: Career switchers, ar: الراغبون في تغيير مسارهم المهني}
+    keywords: [career, switch, switchers, change, changers, transition, new field, no background, non-technical, تغيير المسار, مسار جديد]
+    pains: {en: [Worried the new field is too technical, Little time next to a full-time job, Fear of wasting money on the wrong course],
+            ar: [القلق من صعوبة المجال الجديد, ضيق الوقت بجانب العمل, الخوف من اختيار دورة غير مناسبة]}
+    motivations: {en: [A clear path into a growing field, Evening or weekend schedule, Hands-on projects and mentoring],
+                  ar: [مسار واضح لدخول مجال مطلوب, مواعيد مسائية أو في نهاية الأسبوع, مشاريع عملية وإرشاد]}
+    channels: [facebook_instagram_ad, linkedin_post, email]
+    tone: {en: reassuring, clear and encouraging, ar: مطمئن وواضح ومشجّع}
+    targeting: {meta_interests: [Career change, Online courses, Self-improvement], linkedin_titles: [Accountant, Sales Specialist, Administrator], age: "24-40"}
+  - persona_id: professionals
+    name: {en: Working professionals upskilling, ar: المهنيون الراغبون في تطوير مهاراتهم}
+    keywords: [professional, professionals, developer, developers, engineer, engineers, analyst, analysts, specialist, staff, employee, employees, practitioner, tester, testers, admin, administrators, it, accountant, accountants, مهني, مهندس, مطور, محلل, موظف, موظفين]
+    pains: {en: [Skills falling behind new tools, Need for recognised exam preparation, Busy schedule],
+            ar: [تأخر المهارات عن الأدوات الحديثة, الحاجة للتحضير لشهادات معروفة, جدول عمل مزدحم]}
+    motivations: {en: [Promotion or a better-paid role, Practical skills used at work the next day, Learning from experienced practitioners],
+                  ar: [ترقية أو وظيفة بأجر أعلى, مهارات عملية تُطبَّق في العمل مباشرة, التعلم من خبراء ممارسين]}
+    channels: [linkedin_post, email, facebook_instagram_ad]
+    tone: {en: professional, concrete and results-focused, ar: مهني ومحدد ويركز على النتائج}
+    targeting: {meta_interests: [Professional development, Information technology], linkedin_titles: [Software Engineer, Data Analyst, QA Engineer, IT Specialist], age: "25-45"}
+  - persona_id: managers
+    name: {en: Managers and team leads, ar: المديرون وقادة الفرق}
+    keywords: [manager, managers, lead, leads, leader, leaders, head, director, supervisor, project, pmp, scrum, team, مدير, مديرو, مديري, قائد, رئيس, مشرف]
+    pains: {en: [Projects running late or over budget, Need a recognised framework for the team, No time for long programmes],
+            ar: [تأخر المشاريع أو تجاوز الميزانية, الحاجة لإطار عمل معروف للفريق, عدم توفر وقت لبرامج طويلة]}
+    motivations: {en: [Deliver projects with confidence, Exam preparation for a recognised credential, Group discount for the team],
+                  ar: [إدارة المشاريع بثقة, التحضير لشهادة معروفة, خصم للمجموعات من نفس الفريق]}
+    channels: [linkedin_post, email]
+    tone: {en: confident, concise and business-like, ar: واثق وموجز وعملي}
+    targeting: {meta_interests: [Project management, Leadership], linkedin_titles: [Project Manager, Team Lead, Department Head, Product Owner], age: "28-50"}
+  - persona_id: corporate
+    name: {en: Companies and HR / training departments, ar: الشركات وإدارات الموارد البشرية والتدريب}
+    keywords: [company, companies, corporate, organisation, organization, hr, l&d, training department, ministry, government, bank, banks, hospital, hospitals, شركة, شركات, جهة, وزارة, بنك, مستشفى, الموارد البشرية]
+    pains: {en: [Skill gaps across a team, Training budget must show results, Need for an in-house or tailored schedule],
+            ar: [فجوات مهارية في الفريق, ميزانية التدريب يجب أن تحقق نتائج, الحاجة لمواعيد داخلية أو مخصصة]}
+    motivations: {en: [Measurable outcomes for the team, Flexible formats on-site or online, One provider for several courses],
+                  ar: [نتائج قابلة للقياس للفريق, أشكال مرنة حضورياً أو عن بُعد, جهة واحدة لعدة دورات]}
+    channels: [linkedin_post, email]
+    tone: {en: formal, credible and outcome-driven, ar: رسمي وموثوق ويركز على النتائج}
+    targeting: {meta_interests: [Human resources, Corporate training], linkedin_titles: [HR Manager, L&D Manager, Training Manager], age: "30-55"}
+  - persona_id: entrepreneurs
+    name: {en: Entrepreneurs and small business owners, ar: رواد الأعمال وأصحاب المشروعات الصغيرة}
+    keywords: [entrepreneur, entrepreneurs, owner, owners, business owner, small business, startup, founders, freelancer, freelancers, رائد أعمال, رواد الأعمال, صاحب مشروع, أصحاب المشروعات, مستقل]
+    pains: {en: [Doing everything alone, Marketing and tools that cost too much, Little time to learn],
+            ar: [إنجاز كل شيء بمفردهم, تكلفة الأدوات والتسويق, ضيق الوقت للتعلم]}
+    motivations: {en: [Grow sales and customers, Skills to apply in their own business right away, Short and affordable course],
+                  ar: [زيادة المبيعات والعملاء, مهارات تُطبَّق فوراً في المشروع, دورة قصيرة وبسعر مناسب]}
+    channels: [facebook_instagram_ad, social_caption, whatsapp]
+    tone: {en: direct, practical and motivating, ar: مباشر وعملي ومحفّز}
+    targeting: {meta_interests: [Small business, Entrepreneurship, E-commerce], linkedin_titles: [Founder, Owner, Freelancer], age: "22-45"}
+
+default_persona: professionals

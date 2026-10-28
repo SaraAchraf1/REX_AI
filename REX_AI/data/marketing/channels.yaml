@@ -1,0 +1,82 @@
+# Channel rules for the Marketing Agent (brief, Agent 5 item 38). SAMPLE values written by the team from the
+# platforms' public guidance - confirm them with the academy's marketing team before real use.
+#   headline_max / body_max   hard limits: copy longer than this is cut and flagged for the reviewer
+#   body_target               what the rule-based writer aims for
+#   hashtags                  how many hashtags to add (0 = none)
+#   paid                      true = this channel takes media budget (strategy budget split)
+#   ctas                      allowed call-to-action labels (Meta buttons are a fixed list)
+_meta:
+  source_id: SRC-MKT-CHANNELS
+  status: sample
+  update_date: 2026-10-27
+
+channels:
+  social_caption:
+    name: {en: Social media caption, ar: تعليق لمنشور على وسائل التواصل}
+    role: {en: Organic reach and engagement on the academy's pages, ar: الوصول والتفاعل المجاني على صفحات الأكاديمية}
+    headline_max: 80
+    body_max: 2200
+    body_target: 400
+    hashtags: 4
+    paid: false
+    budget_weight: 0.1          # optional boost of the best organic post
+  facebook_instagram_ad:
+    name: {en: Facebook / Instagram ad, ar: إعلان فيسبوك / إنستجرام}
+    role: {en: Paid reach and retargeting of page visitors, ar: الوصول المدفوع وإعادة استهداف زوار الصفحة}
+    headline_max: 40
+    body_max: 600
+    body_target: 125
+    hashtags: 0
+    paid: true
+    budget_weight: 0.55
+    ctas: [Learn More, Sign Up, Book Now, Contact Us, Apply Now, Get Offer, Send WhatsApp Message]
+  linkedin_post:
+    name: {en: LinkedIn post, ar: منشور لينكدإن}
+    role: {en: Professional credibility with working professionals and employers, ar: المصداقية المهنية لدى المهنيين وأصحاب العمل}
+    headline_max: 150
+    body_max: 3000
+    body_target: 900
+    hashtags: 4
+    paid: true
+    budget_weight: 0.35
+  email:
+    name: {en: Marketing e-mail, ar: رسالة بريد تسويقية}
+    role: {en: Nurture leads who already asked about this course (consented leads only), ar: متابعة العملاء المحتملين الذين سألوا عن الدورة (بموافقتهم فقط)}
+    headline_max: 60            # subject line
+    body_max: 5000
+    body_target: 1200
+    hashtags: 0
+    paid: false
+    budget_weight: 0
+  whatsapp:
+    name: {en: WhatsApp promotional message, ar: رسالة واتساب ترويجية}
+    role: {en: Direct conversion of warm leads who opted in to WhatsApp, ar: تحويل العملاء المهتمين الذين وافقوا على التواصل عبر واتساب}
+    headline_max: 60
+    body_max: 1000
+    body_target: 450
+    hashtags: 0
+    paid: false
+    budget_weight: 0
+
+# Default call to action per campaign objective (used when the request gives no CTA)
+objectives:
+  registrations:
+    funnel: conversion
+    cta: {en: Register now, ar: سجّل الآن}
+    ad_cta: Sign Up
+    kpis: [Registrations, Cost per registration, Landing-page conversion rate, Seats filled before start]
+  awareness:
+    funnel: awareness
+    cta: {en: Learn more, ar: اعرف المزيد}
+    ad_cta: Learn More
+    kpis: [Reach, Impressions, Engagement rate, Follower growth]
+  leads:
+    funnel: consideration
+    cta: {en: Ask us about the course, ar: تواصل معنا للاستفسار}
+    ad_cta: Contact Us
+    kpis: [Leads captured (with consent), Cost per lead, Lead-to-registration rate]
+  webinar sign-ups:
+    funnel: consideration
+    cta: {en: Save your seat in the free info session, ar: احجز مقعدك في الجلسة التعريفية المجانية}
+    ad_cta: Sign Up
+    kpis: [Webinar sign-ups, Attendance rate, Registrations after the webinar]

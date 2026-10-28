@@ -1,0 +1,15 @@
+# Academy facts the RFP agent compares with tender eligibility requirements (rex_ai/agents/rfp/qualify.py).
+# SAMPLE values made by the team - replace with the academy's real registration and certificate data.
+_meta:
+  source_id: SRC-ACAD-PROFILE
+  status: sample
+  last_updated: 2026-10-24
+name: Andalusia Academy
+registered_countries: [EG]          # countries where the academy holds a commercial registration
+saudi_partner: false                # true = can bid in Saudi Arabia through a registered local partner
+years_in_business: 8
+certifications: ["ISO 9001:2015"]
+licences: []                        # e.g. "TVTC training licence" (Saudi Arabia)
+max_trainees_per_year: 1500
+delivery_formats: [online_live, onsite, hybrid]
+languages: [en, ar]

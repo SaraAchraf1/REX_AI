@@ -52,6 +52,13 @@ internal:
     location: data/admission_requirements.json
     access: file
     status: sample
+  - source_id: SRC-ACAD-PROFILE
+    name: Academy profile for tender eligibility (registration, experience, certificates, capacity)
+    owner: Member 2
+    used_by: [rfp_research]
+    location: data/rfp/academy_profile.yaml
+    access: file
+    status: sample
   - source_id: SRC-ACAD-TEMPLATES
     name: Reference document templates (participant guide, facilitator guide, question bank, rubric, proposal...)
     owner: Member 3
@@ -59,10 +66,77 @@ internal:
     location: data/templates/   # requested from Eslam El Hefny (brief §11)
     access: file
     status: to_verify
-    note: Pending from the academy; needed before the Document Agent's template work in Sprint 2.
+    note: Pending from the academy. When they arrive, put them in data/doc_templates/references/ with
+      source_id SRC-ACAD-TEMPLATES in its manifest.yaml; the Document Agent then retrieves and cites them.
+  - source_id: SRC-DOC-TEMPLATES
+    name: Document templates and reference examples written by the team (10 document types, EN/AR headings)
+    owner: Member 3
+    used_by: [document]
+    location: data/doc_templates/
+    access: file
+    status: sample
+    note: templates.yaml fixes the sections of each document; references/ is indexed in the RAG collection doc_templates.
+  - source_id: SRC-ACAD-QUALITY
+    name: Academy curriculum quality baseline (instructional-design checklist)
+    owner: Member 2
+    used_by: [curriculum]
+    location: data/curriculum/frameworks.yaml
+    access: file
+    status: sample
+    note: Applied to every curriculum by the Curriculum Agent; to be approved by the academy.
+  - source_id: SRC-MKT-GUIDE
+    name: Brand voice guide, channel playbook and example campaigns written by the team
+    owner: Member 1
+    used_by: [marketing]
+    location: data/marketing/references/
+    access: file
+    status: sample
+    note: Indexed in the RAG collection marketing_refs (metadata kind, language). Replace with the academy's brand guide.
+  - source_id: SRC-MKT-CHANNELS
+    name: Channel rules (length limits, hashtags, CTA buttons) and objective defaults (CTA, KPIs)
+    owner: Member 1
+    used_by: [marketing]
+    location: data/marketing/channels.yaml
+    access: file
+    status: sample
+  - source_id: SRC-MKT-AUDIENCES
+    name: Audience personas (pains, motivations, preferred channels, targeting suggestions)
+    owner: Member 1
+    used_by: [marketing]
+    location: data/marketing/audiences.yaml
+    access: file
+    status: sample
+  - source_id: SRC-REX-LEADS
+    name: Consented leads captured by the REX Assistant (aggregated, no personal data leaves the database)
+    owner: Member 1
+    used_by: [marketing]
+    location: rex_ai.db (table leads)
+    access: file
+    status: approved
+    note: The Marketing Agent reads only counts and common goals/levels of leads interested in a course.
 
 tenders:
   # Geographic scope is Egypt + Saudi Arabia ONLY (brief, Agent 2 strict rule).
+  # The RFP agent (rex_ai/agents/rfp) reads feeds and documents always; the public portals below are fetched
+  # only with include_live_sources=true (or --live), after robots.txt allows it.
+  - source_id: SRC-RFP-SAMPLE
+    name: Sample tender feed (team-made test data, includes out-of-scope and duplicate notices on purpose)
+    country: [EG, SA]
+    location: data/rfp/feeds/
+    owner: Member 2
+    used_by: [rfp_research]
+    access: file
+    status: sample
+    note: Replace with real exports. Any JSON / CSV / Excel listing dropped in data/rfp/feeds/ is processed.
+  - source_id: SRC-RFP-DOCS
+    name: Tender documents (RFP / RFQ / terms of reference files collected by the team)
+    country: [EG, SA]
+    location: data/rfp/documents/
+    owner: Member 2
+    used_by: [rfp_research]
+    access: file
+    status: sample
+    note: PDF / Word / TXT files; fields are extracted and every passage is indexed in the RAG collection rfp_docs.
   - source_id: SRC-EG-ETENDERS
     name: Egypt Government e-Procurement Portal
     country: EG
@@ -130,6 +204,23 @@ curriculum_references:
     access: file
     status: approved
     note: CC BY-NC-SA 4.0 — academic use with attribution. Loaded by scripts/ingest_mit_ocw.py.
+  - source_id: SRC-CUR-REFS
+    name: Reference syllabi collected by the team (data, testing, security, GenAI, cloud, healthcare, PM in Arabic)
+    country: INTL
+    location: data/curriculum/references/
+    owner: Member 2
+    used_by: [curriculum, document, marketing]
+    access: file
+    status: sample
+    note: Ingested into curriculum_refs with the metadata in references/manifest.yaml. Replace with approved references.
+  - source_id: SRC-CUR-INDUSTRY
+    name: Industry skill requirements per department (job postings EG/SA, ESCO / O*NET profiles)
+    country: [EG, SA]
+    location: data/curriculum/industry_skills.yaml
+    owner: Member 2
+    used_by: [curriculum]
+    access: file
+    status: sample
 
 accreditation_and_competency:
   # Used by the Curriculum Agent for alignment ONLY — never to claim official accreditation.
@@ -173,3 +264,24 @@ accreditation_and_competency:
     url: https://www.onetonline.org/
     owner: Member 2
     status: to_verify
+  - source_id: SRC-INTL-ISTQB
+    name: ISTQB Certified Tester Foundation Level (CTFL) v4.0 syllabus
+    country: INTL
+    url: https://www.istqb.org/certifications/certified-tester-foundation-level
+    owner: Member 2
+    status: to_verify
+    note: Chapter-level summary in data/curriculum/frameworks.yaml (ISTQB-CTFL-4).
+  - source_id: SRC-INTL-AWS-CCP
+    name: AWS Certified Cloud Practitioner (CLF-C02) exam guide
+    country: INTL
+    url: https://aws.amazon.com/certification/certified-cloud-practitioner/
+    owner: Member 2
+    status: to_verify
+    note: Domain-level summary in data/curriculum/frameworks.yaml (AWS-CLF-C02).
+  - source_id: SRC-INTL-PMI
+    name: PMI PMP Examination Content Outline (2021)
+    country: INTL
+    url: https://www.pmi.org/certifications/project-management-pmp
+    owner: Member 2
+    status: to_verify
+    note: Domain-level summary in data/curriculum/frameworks.yaml (PMI-PMP-ECO-2021).

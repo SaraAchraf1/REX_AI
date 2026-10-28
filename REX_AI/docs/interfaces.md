@@ -30,10 +30,10 @@ owner whose agent uses that model (see the Owner column).
 | `FAQ` | `faqs` | M1 | faq_id, category, q/a in en and ar, keywords |
 | `LeadProfile` | `chat_sessions.profile` | M1 | background, education_level, experience_years, interests, career_goal, skill_level, preferred_format, budget, weekly_hours |
 | `LeadCreate` / `Lead` | `leads` | M1 | name, email or phone, interested_course_ids, profile, consent (must be true) |
-| `RFPRecord` | `rfps` | M2 | title, issuing_organization, country, deadline, eligibility, training_category, submission_link, publication_date, documents, summary, qualification, status, dedupe_hash, source |
-| `Curriculum`, `GapReport`, `ReviewAction` | `curricula`, `gap_reports`, `reviews`, `accreditation_standards` | M2 | objectives, audience, prerequisites, outcomes, modules, hours, exercises, assessments, capstone; coverage_pct, missing topics/outcomes |
-| `DocumentRequest` / `DocumentRecord` | `documents` | M3 | doc_type (10 types), course_id or curriculum_id, language, file_path, download_url, status |
-| `CampaignRequest` / `Campaign` | `campaigns`, `campaign_variants` | M1 | channels, objective, offer, cta, variants, course_facts_used, status |
+| `RFPRecord` | `rfps`, `rfp_alerts` | M2 | title, issuing_organization, country, deadline, eligibility, training_category, submission_link, publication_date, documents, summary, qualification, status, dedupe_hash, source; Sprint 2 adds relevance_score, matched_course_ids, priority, first_seen (existing databases get the columns automatically in `db.init_db`) |
+| `CurriculumRequest`, `Curriculum`, `GapReport`, `GapItem`, `ReviewAction`, `CurriculumRevision`, `CurriculumImport` | `curricula`, `curriculum_versions`, `gap_reports`, `reviews`, `accreditation_standards`, `handoff_events` | M2 | objectives, audience, prerequisites, outcomes, modules, hours, exercises, assessments, capstone, metadata (brief table); coverage_pct, covered / partial / missing items with evidence, missing topics/outcomes, recommendations. Sprint 2 adds optional fields only: `course_id` on the request (the other answers become optional with it), `course_id`, `language`, timestamps on `Curriculum`; `report_id`, `items`, `partial`, `recommendations` on `GapReport` |
+| `DocumentRequest` / `DocumentRecord`, `DocSection`, `DocTable`, `DocumentEdit`, `DocumentEmail`, `DocumentPackRequest`, `DocumentTypeInfo` | `documents`, `document_versions`, `reviews`, `handoff_events` | M3 | doc_type (10 types), course_id or curriculum_id, language, file_path, download_url, status. Sprint 2 adds optional fields only: `instructions` on the request; `version`, `template_id`, `sections` (heading, paragraphs, bullets, table, notes, locked), `metadata` (facts used, generated_by, notes), `reviewer_comments`, `emailed_to`, `updated_at` on the record (existing databases get the new `documents` columns automatically in `db.init_db`) |
+| `CampaignRequest` / `Campaign`, `ContentVariant`, `CampaignEdit`, `CampaignPublish`, `ChannelInfo` | `campaigns`, `campaign_variants`, `campaign_versions`, `reviews`, `handoff_events` | M1 | channels, objective, offer, cta, variants, course_facts_used, status. Sprint 2 adds optional fields only: `document_id`, `instructions` on the request (course_id upper-cased, at least one channel); `angle`, `hashtags`, `char_count`, `checks`, `generated_by` on a variant; `title`, `curriculum_id`, `document_id`, `language`, `objective`, `target_audience`, `channels`, `headlines`, `ctas`, `strategy_plan`, `version`, `metadata`, `reviewer_comments`, `download_url`, `updated_at` on the campaign (existing databases get the new `campaigns` columns automatically in `db.init_db`) |
 | `JobRun`, `HandoffEvent` | `job_runs`, `handoff_events`, `app_logs` | M3 | agent, status, output_ref, error; from_agent → to_agent with payload_id |
 
 ## 3. Endpoints
@@ -48,15 +48,47 @@ owner whose agent uses that model (see the Owner column).
 | `POST /rag/search` | Shared RAG (all agents) | `RAGSearchRequest` → `RAGSearchResponse` (hits, cited context, sources) | Built (Sprint 2) |
 | `GET /rag/collections/{name}` | Shared RAG | — → `{chunks, documents, embedder, chunk_methods}` | Built (Sprint 2) |
 | `POST /route` | Orchestrator | `RouteRequest` → `RouteResponse` | Keyword router (Sprint 1) |
-| `POST /rfp/run` | RFP Research | `RFPRunRequest` → `RFPRunResult` | Sprint 2 (M2) |
-| `GET /rfp?country=&status=` | RFP Research | — → `RFPRecord[]` | Sprint 2 (M2) |
-| `POST /curriculum` | Curriculum | `CurriculumRequest` → `Curriculum` | Sprint 2 (M2) |
-| `POST /curriculum/{id}/gap-report` | Curriculum | `{framework}` → `GapReport` | Sprint 2 (M2) |
-| `POST /curriculum/{id}/review` | Curriculum | `ReviewAction` → `Curriculum` | Sprint 2 (M2) |
-| `POST /documents` | Document | `DocumentRequest` → `DocumentRecord` | Sprint 2 (M3) |
-| `GET /documents/{id}/download` | Document | — → PDF file | Sprint 2 (M3) |
-| `POST /campaigns` | Marketing | `CampaignRequest` → `Campaign` | Sprint 2 (M1) |
-| `POST /campaigns/{id}/review` | Marketing | `ReviewAction` → `Campaign` | Sprint 2 (M1) |
+| `POST /rfp/run` | RFP Research | `RFPRunRequest` → `RFPRunResult` (counts, rejections with reasons, new EG/SA ids) | Built (Sprint 2) |
+| `GET /rfp?country=&status=&category=&qualification=&q=&open_only=` | RFP Research | — → `RFPRecord[]` (Egypt first, then deadline) | Built (Sprint 2) |
+| `GET /rfp/{rfp_id}` | RFP Research | — → `RFPRecord` (404 if unknown) | Built (Sprint 2) |
+| `PATCH /rfp/{rfp_id}/status` | RFP Research | `RFPStatusUpdate {status, reviewer, comment}` → `RFPRecord` | Built (Sprint 2) |
+| `GET /rfp/export.csv` | RFP Research | — → CSV (UTF-8 BOM, opens in Excel / Google Sheets) | Built (Sprint 2) |
+| `GET /rfp/alerts` | RFP Research | — → `RFPAlert[]` | Built (Sprint 2) |
+| `POST /rfp/ask` | RFP Research | `RFPAskRequest` → `RFPAskResponse` (RAG over records + tender documents, cited) | Built (Sprint 2) |
+| `POST /rfp/upload` | RFP Research | file → `{file, kind: document/feed}` | Built (Sprint 2) |
+| `GET /curriculum/frameworks` | Curriculum | — → `FrameworkInfo[]` | Built (Sprint 2) |
+| `POST /curriculum/research` | Curriculum | `CurriculumRequest` → `CurriculumResearch` (preview, nothing stored) | Built (Sprint 2) |
+| `POST /curriculum` | Curriculum | `CurriculumRequest` → `Curriculum` (201, draft v1, alignment reports stored) | Built (Sprint 2) |
+| `POST /curriculum/import` | Curriculum | `CurriculumImport {course_id or proposal, framework}` → `Curriculum` | Built (Sprint 2) |
+| `GET /curriculum?department=&skill_level=&country=&status=&framework=&industry=&audience=&min_hours=&max_hours=&q=` | Curriculum | — → `Curriculum[]` (metadata filtering) | Built (Sprint 2) |
+| `GET /curriculum/{id}` | Curriculum | — → `Curriculum` (404 if unknown) | Built (Sprint 2) |
+| `POST /curriculum/{id}/gap-report` | Curriculum | `GapReportRequest {framework}` → `GapReport` (404 unknown framework) | Built (Sprint 2) |
+| `GET /curriculum/{id}/gap-reports` | Curriculum | — → `GapReport[]` (latest per framework) | Built (Sprint 2) |
+| `POST /curriculum/{id}/review` | Curriculum | `ReviewAction` → `Curriculum` (409 on an invalid transition; approved → `HandoffEvent` to document) | Built (Sprint 2) |
+| `POST /curriculum/{id}/revise` | Curriculum | `CurriculumRevision {reviewer, instructions or content}` → `Curriculum` (version + 1, draft) | Built (Sprint 2) |
+| `GET /curriculum/{id}/history` | Curriculum | — → `{versions, reviews, gap_reports, handoffs}` | Built (Sprint 2) |
+| `GET /curriculum/{id}/pdf?include_alignment=` | Curriculum | — → PDF file (DRAFT watermark until approved) | Built (Sprint 2) |
+| `GET /documents/types` | Document | — → `DocumentTypeInfo[]` (10 types, template, sections) | Built (Sprint 2) |
+| `GET /documents/handoffs` | Document | — → approved curricula handed over, with the documents made from them | Built (Sprint 2) |
+| `POST /documents` | Document | `DocumentRequest` → `DocumentRecord` (201, draft v1 with sections and PDF) | Built (Sprint 2) |
+| `POST /documents/pack` | Document | `DocumentPackRequest` → `DocumentRecord[]` | Built (Sprint 2) |
+| `GET /documents?doc_type=&status=&course_id=&curriculum_id=&language=&q=` | Document | — → `DocumentRecord[]` | Built (Sprint 2) |
+| `GET /documents/{id}` | Document | — → `DocumentRecord` (404 if unknown) | Built (Sprint 2) |
+| `PATCH /documents/{id}` | Document | `DocumentEdit {reviewer, sections, remove_sections, title, instructions}` → `DocumentRecord` (version + 1, draft) | Built (Sprint 2) |
+| `POST /documents/{id}/review` | Document | `ReviewAction` → `DocumentRecord` (409 if the curriculum is not approved / changed; approved → `HandoffEvent` to marketing) | Built (Sprint 2) |
+| `POST /documents/{id}/email` | Document | `DocumentEmail {to, sender, message}` → `DocumentRecord` (409 unless approved) | Built (Sprint 2) |
+| `GET /documents/{id}/history` | Document | — → `{versions, reviews, handoffs}` | Built (Sprint 2) |
+| `GET /documents/{id}/download` | Document | — → PDF file (DRAFT watermark until approved) | Built (Sprint 2) |
+| `GET /campaigns/channels` | Marketing | — → `ChannelInfo[]` (5 channels, limits, paid/organic) | Built (Sprint 2) |
+| `GET /campaigns/handoffs` | Marketing | — → approved documents and approved curricula ready for a campaign, with campaign counts | Built (Sprint 2) |
+| `POST /campaigns` | Marketing | `CampaignRequest` → `Campaign` (201, pending_approval v1, brief PDF; 404 unknown course / curriculum / document, 400 curriculum of another course) | Built (Sprint 2) |
+| `GET /campaigns?course_id=&status=&curriculum_id=&language=&q=` | Marketing | — → `Campaign[]` | Built (Sprint 2) |
+| `GET /campaigns/{id}` | Marketing | — → `Campaign` (404 if unknown) | Built (Sprint 2) |
+| `PATCH /campaigns/{id}` | Marketing | `CampaignEdit {reviewer, variants, remove_variants, strategy, instructions}` → `Campaign` (version + 1, pending_approval) | Built (Sprint 2) |
+| `POST /campaigns/{id}/review` | Marketing | `ReviewAction` → `Campaign` (409 if the curriculum / document is not approved or the quoted facts changed) | Built (Sprint 2) |
+| `POST /campaigns/{id}/publish` | Marketing | `CampaignPublish {publisher, variant_keys, email_to}` → `Campaign` (409 unless approved and current, 400 unknown variants, 502 e-mail failed) | Built (Sprint 2) |
+| `GET /campaigns/{id}/history` | Marketing | — → `{versions, reviews, publications, handoffs}` | Built (Sprint 2) |
+| `GET /campaigns/{id}/pdf` | Marketing | — → campaign brief PDF (DRAFT watermark until approved) | Built (Sprint 2) |
 
 ### Example: `POST /chat`
 
@@ -101,7 +133,10 @@ Curriculum (M2) --approved--> HandoffEvent --> Document (M3) --approved--> Hando
 2. On `approved`, the orchestrator writes `HandoffEvent {from: curriculum, to: document, payload_type: "curriculum", payload_id}`.
 3. Document Agent builds the requested PDFs from that `curriculum_id` and stores `DocumentRecord`s.
 4. On document approval, a second `HandoffEvent` starts the Marketing Agent with `course_id` + `curriculum_id`.
-   Marketing copy may only use facts listed in `Campaign.course_facts_used` (snapshot of approved data).
+   Marketing copy may only use facts listed in `Campaign.course_facts_used` (snapshot of approved data): every number
+   in the copy is checked against it. The Marketing Agent also picks up approved curricula of catalogue courses
+   directly (`GET /campaigns/handoffs`), following the brief's "Curriculum Approved → Marketing Agent" workflow.
+   A campaign is approved by an administrator and only then published (`POST /campaigns/{id}/publish`).
 5. Every agent call writes a `JobRun` (queued → running → succeeded/failed) for status display and logs.
 
 ## 5. Knowledge base format

@@ -35,8 +35,27 @@ def connect(db_path: Optional[Path] = None) -> Iterator[sqlite3.Connection]:
 def init_db(db_path: Optional[Path] = None, seed: bool = True) -> None:
     with connect(db_path) as conn:
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+        _migrate(conn)
         if seed:
             _seed(conn)
+
+
+# Columns added after Sprint 1: CREATE TABLE IF NOT EXISTS does not add them to an existing database.
+_ADDED_COLUMNS = {
+    "rfps": {"source_title": "TEXT", "relevance_score": "REAL NOT NULL DEFAULT 0", "matched_course_ids": "TEXT",
+             "priority": "TEXT NOT NULL DEFAULT 'normal'", "first_seen": "TEXT"},
+    "documents": {"content": "TEXT", "request": "TEXT", "version": "INTEGER NOT NULL DEFAULT 1", "updated_at": "TEXT"},
+    "campaigns": {"content": "TEXT", "document_id": "TEXT", "language": "TEXT", "version": "INTEGER NOT NULL DEFAULT 1",
+                  "updated_at": "TEXT"},
+}
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    for table, columns in _ADDED_COLUMNS.items():
+        existing = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+        for name, decl in columns.items():
+            if name not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
 
 
 def _load(name: str) -> dict:
@@ -166,3 +185,408 @@ def log_event(level: str, event: str, agent: Optional[str] = None, detail: Optio
                          (level, agent, event, detail, _now()))
     except sqlite3.Error:
         pass  # logging must never break a request
+
+
+# --------------------------------------------------------------------------- #
+# Job runs (every agent run is traceable: queued -> running -> succeeded/failed)
+# --------------------------------------------------------------------------- #
+def start_job(agent: str, payload: dict, db_path: Optional[Path] = None) -> str:
+    job_id = "JOB-" + uuid.uuid4().hex[:10]
+    with connect(db_path) as conn:
+        conn.execute("INSERT INTO job_runs (job_id, agent, status, input, started_at) VALUES (?,?,?,?,?)",
+                     (job_id, agent, "running", json.dumps(payload, ensure_ascii=False, default=str), _now()))
+    return job_id
+
+
+def finish_job(job_id: str, status: str, output_ref: Optional[str] = None, error: Optional[str] = None,
+               db_path: Optional[Path] = None) -> None:
+    with connect(db_path) as conn:
+        conn.execute("UPDATE job_runs SET status=?, output_ref=?, error=?, finished_at=? WHERE job_id=?",
+                     (status, output_ref, error, _now(), job_id))
+
+
+# --------------------------------------------------------------------------- #
+# Tender / RFP research (owner: Member 2)
+# --------------------------------------------------------------------------- #
+_RFP_JSON = ("available_documents", "matched_course_ids")
+
+
+def _rfp_row(row: sqlite3.Row) -> dict:
+    r = dict(row)
+    for key in _RFP_JSON:
+        r[key] = json.loads(r[key]) if r.get(key) else []
+    return r
+
+
+def save_rfp(rec: dict, db_path: Optional[Path] = None) -> None:
+    """Insert a new RFP or refresh an existing one (same rfp_id). Status set by a reviewer is kept."""
+    src = rec["source"]
+    with connect(db_path) as conn:
+        conn.execute(
+            """INSERT INTO rfps (rfp_id, title, issuing_organization, country, deadline, eligibility_requirements,
+                 training_category, submission_link, publication_date, available_documents, summary, qualification,
+                 qualification_notes, status, dedupe_hash, source_id, source_url, last_checked, source_title,
+                 relevance_score, matched_course_ids, priority, first_seen)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+               ON CONFLICT(rfp_id) DO UPDATE SET deadline=excluded.deadline,
+                 eligibility_requirements=excluded.eligibility_requirements, submission_link=excluded.submission_link,
+                 available_documents=excluded.available_documents, summary=excluded.summary,
+                 qualification=excluded.qualification, qualification_notes=excluded.qualification_notes,
+                 relevance_score=excluded.relevance_score, matched_course_ids=excluded.matched_course_ids,
+                 last_checked=excluded.last_checked""",
+            (rec["rfp_id"], rec["title"], rec["issuing_organization"], rec["country"], rec.get("deadline"),
+             rec.get("eligibility_requirements"), rec["training_category"], rec.get("submission_link"),
+             rec.get("publication_date"), json.dumps(rec.get("available_documents", []), ensure_ascii=False),
+             rec.get("summary"), rec["qualification"], rec.get("qualification_notes"), rec["status"],
+             rec["dedupe_hash"], src["source_id"], src.get("url"), rec["last_checked"], src.get("title"),
+             rec.get("relevance_score", 0.0), json.dumps(rec.get("matched_course_ids", [])),
+             rec.get("priority", "normal"), rec.get("first_seen") or rec["last_checked"]),
+        )
+
+
+def get_rfp(rfp_id: str, db_path: Optional[Path] = None) -> Optional[dict]:
+    with connect(db_path) as conn:
+        row = conn.execute("SELECT * FROM rfps WHERE rfp_id=?", (rfp_id,)).fetchone()
+        return _rfp_row(row) if row else None
+
+
+def find_rfp_by_hash(dedupe_hash: str, db_path: Optional[Path] = None) -> Optional[dict]:
+    with connect(db_path) as conn:
+        row = conn.execute("SELECT * FROM rfps WHERE dedupe_hash=?", (dedupe_hash,)).fetchone()
+        return _rfp_row(row) if row else None
+
+
+def list_rfps(country: Optional[str] = None, status: Optional[str] = None, category: Optional[str] = None,
+              qualification: Optional[str] = None, q: Optional[str] = None, open_only: bool = False,
+              today: Optional[str] = None, limit: int = 500, db_path: Optional[Path] = None) -> list[dict]:
+    """Dashboard search: exact filters + free text over title, organisation, eligibility and summary."""
+    sql, args = "SELECT * FROM rfps WHERE 1=1", []
+    for col, val in (("country", country), ("status", status), ("training_category", category),
+                     ("qualification", qualification)):
+        if val:
+            sql += f" AND {col}=?"
+            args.append(val)
+    if q:
+        sql += (" AND (title LIKE ? OR issuing_organization LIKE ? OR eligibility_requirements LIKE ?"
+                " OR summary LIKE ?)")
+        args += [f"%{q}%"] * 4
+    if open_only:
+        sql += " AND (deadline IS NULL OR deadline >= ?)"
+        args.append(today or datetime.now(timezone.utc).date().isoformat())
+    sql += " ORDER BY CASE priority WHEN 'high' THEN 0 ELSE 1 END, deadline IS NULL, deadline LIMIT ?"
+    args.append(limit)
+    with connect(db_path) as conn:
+        return [_rfp_row(r) for r in conn.execute(sql, args)]
+
+
+def update_rfp_status(rfp_id: str, status: str, db_path: Optional[Path] = None) -> bool:
+    with connect(db_path) as conn:
+        return conn.execute("UPDATE rfps SET status=? WHERE rfp_id=?", (status, rfp_id)).rowcount > 0
+
+
+def expire_rfps(today: str, db_path: Optional[Path] = None) -> int:
+    """Mark stored RFPs whose deadline has passed (reviewer decisions qualified/rejected are kept)."""
+    with connect(db_path) as conn:
+        return conn.execute(
+            "UPDATE rfps SET status='expired' WHERE deadline < ? AND status IN ('new','flagged_review','monitoring')",
+            (today,)).rowcount
+
+
+def save_rfp_alert(alert: dict, db_path: Optional[Path] = None) -> None:
+    with connect(db_path) as conn:
+        conn.execute("INSERT INTO rfp_alerts VALUES (?,?,?,?,?,?,?)",
+                     (alert["alert_id"], alert["rfp_id"], alert["country"], alert["priority"], alert["message"],
+                      json.dumps(alert["channels"]), alert["created_at"]))
+
+
+def list_rfp_alerts(limit: int = 50, db_path: Optional[Path] = None) -> list[dict]:
+    with connect(db_path) as conn:
+        rows = conn.execute("SELECT * FROM rfp_alerts ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,))
+        return [{**dict(r), "channels": json.loads(r["channels"])} for r in rows]
+
+
+# --------------------------------------------------------------------------- #
+# Curriculum and accreditation alignment (owner: Member 2)
+# --------------------------------------------------------------------------- #
+def save_standards(rows: list[dict], db_path: Optional[Path] = None) -> None:
+    """Framework competencies -> accreditation_standards (idempotent)."""
+    with connect(db_path) as conn:
+        conn.executemany("INSERT OR REPLACE INTO accreditation_standards VALUES (?,?,?,?,?,?,?)",
+                         [(r["standard_id"], r["framework"], r.get("country"), r["competency"], r.get("description"),
+                           r["source_id"], r.get("last_checked")) for r in rows])
+
+
+def list_standards(framework: Optional[str] = None, db_path: Optional[Path] = None) -> list[dict]:
+    sql, args = "SELECT * FROM accreditation_standards", []
+    if framework:
+        sql, args = sql + " WHERE framework=?", [framework]
+    with connect(db_path) as conn:
+        return [dict(r) for r in conn.execute(sql + " ORDER BY standard_id", args)]
+
+
+def save_curriculum(cur: dict, request: dict, change_note: Optional[str] = None, changed_by: Optional[str] = None,
+                    db_path: Optional[Path] = None) -> None:
+    """Insert or update a curriculum and keep a copy of this version in curriculum_versions."""
+    meta = cur.get("metadata") or {}
+    now = _now()
+    content = json.dumps(cur, ensure_ascii=False, default=str)
+    with connect(db_path) as conn:
+        conn.execute(
+            """INSERT INTO curricula (curriculum_id, course_id, course_title, request, content, department,
+                 target_audience, skill_level, industry, duration_hours, accreditation_framework, country, status,
+                 version, created_at, updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+               ON CONFLICT(curriculum_id) DO UPDATE SET course_title=excluded.course_title, content=excluded.content,
+                 department=excluded.department, target_audience=excluded.target_audience,
+                 skill_level=excluded.skill_level, industry=excluded.industry, duration_hours=excluded.duration_hours,
+                 accreditation_framework=excluded.accreditation_framework, country=excluded.country,
+                 status=excluded.status, version=excluded.version, updated_at=excluded.updated_at""",
+            (cur["curriculum_id"], cur.get("course_id"), cur["course_title"],
+             json.dumps(request, ensure_ascii=False, default=str), content, meta.get("department"),
+             cur.get("target_audience"), meta.get("skill_level"), meta.get("industry"), cur.get("training_hours"),
+             meta.get("accreditation_framework"), meta.get("country"), cur["status"], cur["version"], now, now))
+        conn.execute("INSERT OR REPLACE INTO curriculum_versions VALUES (?,?,?,?,?,?)",
+                     (cur["curriculum_id"], cur["version"], content, change_note, changed_by, now))
+
+
+def _curriculum_row(row: sqlite3.Row) -> dict:
+    r = dict(row)
+    r["content"] = json.loads(r["content"])
+    r["request"] = json.loads(r["request"])
+    return r
+
+
+def get_curriculum(curriculum_id: str, db_path: Optional[Path] = None) -> Optional[dict]:
+    with connect(db_path) as conn:
+        row = conn.execute("SELECT * FROM curricula WHERE curriculum_id=?", (curriculum_id,)).fetchone()
+        return _curriculum_row(row) if row else None
+
+
+def list_curricula(department: Optional[str] = None, skill_level: Optional[str] = None,
+                   country: Optional[str] = None, status: Optional[str] = None, framework: Optional[str] = None,
+                   industry: Optional[str] = None, audience: Optional[str] = None, q: Optional[str] = None,
+                   min_hours: Optional[float] = None, max_hours: Optional[float] = None, limit: int = 200,
+                   db_path: Optional[Path] = None) -> list[dict]:
+    """Metadata filtering (brief: department, audience, level, industry, duration, framework, country) + free text."""
+    sql, args = "SELECT * FROM curricula WHERE 1=1", []
+    for col, val in (("department", department), ("skill_level", skill_level), ("country", country),
+                     ("status", status)):
+        if val:
+            sql += f" AND lower({col})=lower(?)"
+            args.append(val)
+    for col, val in (("accreditation_framework", framework), ("industry", industry), ("target_audience", audience)):
+        if val:
+            sql += f" AND {col} LIKE ?"
+            args.append(f"%{val}%")
+    if min_hours is not None:
+        sql += " AND duration_hours >= ?"
+        args.append(min_hours)
+    if max_hours is not None:
+        sql += " AND duration_hours <= ?"
+        args.append(max_hours)
+    if q:
+        sql += " AND (course_title LIKE ? OR content LIKE ?)"
+        args += [f"%{q}%"] * 2
+    sql += " ORDER BY updated_at DESC, rowid DESC LIMIT ?"
+    args.append(limit)
+    with connect(db_path) as conn:
+        return [_curriculum_row(r) for r in conn.execute(sql, args)]
+
+
+def list_curriculum_versions(curriculum_id: str, db_path: Optional[Path] = None) -> list[dict]:
+    with connect(db_path) as conn:
+        rows = conn.execute("SELECT * FROM curriculum_versions WHERE curriculum_id=? ORDER BY version",
+                            (curriculum_id,))
+        return [{**dict(r), "content": json.loads(r["content"])} for r in rows]
+
+
+def save_gap_report(report: dict, db_path: Optional[Path] = None) -> None:
+    with connect(db_path) as conn:
+        conn.execute("INSERT OR REPLACE INTO gap_reports VALUES (?,?,?,?,?)",
+                     (report["report_id"], report["curriculum_id"], report["framework"],
+                      json.dumps(report, ensure_ascii=False, default=str), _now()))
+
+
+def list_gap_reports(curriculum_id: str, db_path: Optional[Path] = None) -> list[dict]:
+    """Newest first."""
+    with connect(db_path) as conn:
+        rows = conn.execute("SELECT content FROM gap_reports WHERE curriculum_id=? "
+                            "ORDER BY created_at DESC, rowid DESC", (curriculum_id,))
+        return [json.loads(r["content"]) for r in rows]
+
+
+def save_review(object_type: str, object_id: str, action: str, reviewer: str, comment: Optional[str] = None,
+                db_path: Optional[Path] = None) -> None:
+    with connect(db_path) as conn:
+        conn.execute("INSERT INTO reviews (object_type, object_id, action, reviewer, comment, created_at) "
+                     "VALUES (?,?,?,?,?,?)", (object_type, object_id, action, reviewer, comment, _now()))
+
+
+def list_reviews(object_type: str, object_id: str, db_path: Optional[Path] = None) -> list[dict]:
+    with connect(db_path) as conn:
+        rows = conn.execute("SELECT * FROM reviews WHERE object_type=? AND object_id=? ORDER BY review_id",
+                            (object_type, object_id))
+        return [dict(r) for r in rows]
+
+
+def save_handoff(from_agent: str, to_agent: str, payload_type: str, payload_id: str,
+                 db_path: Optional[Path] = None) -> dict:
+    """Agent-to-agent handoff (docs/interfaces.md §4), e.g. approved curriculum -> Document Agent."""
+    event = {"event_id": "EVT-" + uuid.uuid4().hex[:10], "from_agent": from_agent, "to_agent": to_agent,
+             "payload_type": payload_type, "payload_id": payload_id, "created_at": _now()}
+    with connect(db_path) as conn:
+        conn.execute("INSERT INTO handoff_events VALUES (?,?,?,?,?,?)", tuple(event.values()))
+    return event
+
+
+def list_handoffs(payload_id: Optional[str] = None, db_path: Optional[Path] = None) -> list[dict]:
+    sql, args = "SELECT * FROM handoff_events", []
+    if payload_id:
+        sql, args = sql + " WHERE payload_id=?", [payload_id]
+    with connect(db_path) as conn:
+        return [dict(r) for r in conn.execute(sql + " ORDER BY created_at, rowid", args)]
+
+
+# --------------------------------------------------------------------------- #
+# Generated documents (owner: Member 3)
+# --------------------------------------------------------------------------- #
+def save_document(doc: dict, request: dict, change_note: Optional[str] = None, changed_by: Optional[str] = None,
+                  db_path: Optional[Path] = None) -> None:
+    """Insert or update a document and keep a copy of this version in document_versions."""
+    now = _now()
+    content = json.dumps(doc, ensure_ascii=False, default=str)
+    with connect(db_path) as conn:
+        conn.execute(
+            """INSERT INTO documents (document_id, doc_type, title, course_id, curriculum_id, language, file_path,
+                 status, sources, emailed_to, created_at, content, request, version, updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+               ON CONFLICT(document_id) DO UPDATE SET title=excluded.title, file_path=excluded.file_path,
+                 status=excluded.status, sources=excluded.sources, emailed_to=excluded.emailed_to,
+                 content=excluded.content, version=excluded.version, updated_at=excluded.updated_at""",
+            (doc["document_id"], doc["doc_type"], doc["title"], doc.get("course_id"), doc.get("curriculum_id"),
+             doc["language"], doc["file_path"], doc["status"], json.dumps(doc.get("sources") or [], default=str),
+             json.dumps(doc.get("emailed_to") or []), doc.get("created_at") or now, content,
+             json.dumps(request, ensure_ascii=False, default=str), doc.get("version", 1), now))
+        conn.execute("INSERT OR REPLACE INTO document_versions VALUES (?,?,?,?,?,?)",
+                     (doc["document_id"], doc.get("version", 1), content, change_note, changed_by, now))
+
+
+def _document_row(row: sqlite3.Row) -> dict:
+    r = dict(row)
+    r["content"] = json.loads(r["content"]) if r.get("content") else None
+    r["request"] = json.loads(r["request"]) if r.get("request") else {}
+    return r
+
+
+def get_document(document_id: str, db_path: Optional[Path] = None) -> Optional[dict]:
+    with connect(db_path) as conn:
+        row = conn.execute("SELECT * FROM documents WHERE document_id=?", (document_id,)).fetchone()
+        return _document_row(row) if row else None
+
+
+def list_documents(doc_type: Optional[str] = None, status: Optional[str] = None, course_id: Optional[str] = None,
+                   curriculum_id: Optional[str] = None, language: Optional[str] = None, q: Optional[str] = None,
+                   limit: int = 200, db_path: Optional[Path] = None) -> list[dict]:
+    """Newest first. Rows from Sprint 1 without content are skipped (nothing to show or edit)."""
+    sql, args = "SELECT * FROM documents WHERE content IS NOT NULL", []
+    for col, val in (("doc_type", doc_type), ("status", status), ("course_id", course_id),
+                     ("curriculum_id", curriculum_id), ("language", language)):
+        if val:
+            sql += f" AND {col}=?"
+            args.append(val)
+    if q:
+        sql += " AND (title LIKE ? OR content LIKE ?)"
+        args += [f"%{q}%"] * 2
+    sql += " ORDER BY coalesce(updated_at, created_at) DESC, rowid DESC LIMIT ?"
+    args.append(limit)
+    with connect(db_path) as conn:
+        return [_document_row(r) for r in conn.execute(sql, args)]
+
+
+def list_document_versions(document_id: str, db_path: Optional[Path] = None) -> list[dict]:
+    with connect(db_path) as conn:
+        rows = conn.execute("SELECT * FROM document_versions WHERE document_id=? ORDER BY version", (document_id,))
+        return [{**dict(r), "content": json.loads(r["content"])} for r in rows]
+
+
+def lead_interest(course_id: str, db_path: Optional[Path] = None) -> list[dict]:
+    """Profiles of consented leads interested in a course - no names or contact details (Marketing Agent)."""
+    with connect(db_path) as conn:
+        rows = conn.execute("SELECT interested_course_ids, profile, created_at FROM leads "
+                            "WHERE interested_course_ids LIKE ?", (f'%"{course_id}"%',))
+        return [{"profile": json.loads(r["profile"] or "{}"), "created_at": r["created_at"]} for r in rows]
+
+
+# --------------------------------------------------------------------------- #
+# Marketing campaigns (owner: Member 1)
+# --------------------------------------------------------------------------- #
+def save_campaign(camp: dict, request: dict, change_note: Optional[str] = None, changed_by: Optional[str] = None,
+                  db_path: Optional[Path] = None) -> None:
+    """Insert or update a campaign, rewrite its current variants and keep a copy of this version."""
+    now = _now()
+    content = json.dumps(camp, ensure_ascii=False, default=str)
+    with connect(db_path) as conn:
+        conn.execute(
+            """INSERT INTO campaigns (campaign_id, course_id, curriculum_id, request, strategy, course_facts_used,
+                 status, created_at, content, document_id, language, version, updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+               ON CONFLICT(campaign_id) DO UPDATE SET strategy=excluded.strategy,
+                 course_facts_used=excluded.course_facts_used, status=excluded.status, content=excluded.content,
+                 version=excluded.version, updated_at=excluded.updated_at""",
+            (camp["campaign_id"], camp["course_id"], camp.get("curriculum_id"),
+             json.dumps(request, ensure_ascii=False, default=str), camp["strategy"],
+             json.dumps(camp["course_facts_used"], ensure_ascii=False, default=str), camp["status"],
+             camp.get("created_at") or now, content, camp.get("document_id"), camp.get("language"),
+             camp.get("version", 1), now))
+        conn.execute("DELETE FROM campaign_variants WHERE campaign_id=?", (camp["campaign_id"],))
+        conn.executemany("INSERT INTO campaign_variants (campaign_id, channel, variant_no, headline, body, cta) "
+                         "VALUES (?,?,?,?,?,?)",
+                         [(camp["campaign_id"], v["channel"], v["variant_no"], v.get("headline"), v["body"], v["cta"])
+                          for v in camp["variants"]])
+        conn.execute("INSERT OR REPLACE INTO campaign_versions VALUES (?,?,?,?,?,?)",
+                     (camp["campaign_id"], camp.get("version", 1), content, change_note, changed_by, now))
+
+
+def _campaign_row(row: sqlite3.Row) -> dict:
+    r = dict(row)
+    r["content"] = json.loads(r["content"]) if r.get("content") else None
+    r["request"] = json.loads(r["request"]) if r.get("request") else {}
+    return r
+
+
+def get_campaign(campaign_id: str, db_path: Optional[Path] = None) -> Optional[dict]:
+    with connect(db_path) as conn:
+        row = conn.execute("SELECT * FROM campaigns WHERE campaign_id=?", (campaign_id,)).fetchone()
+        return _campaign_row(row) if row else None
+
+
+def list_campaigns(course_id: Optional[str] = None, status: Optional[str] = None, curriculum_id: Optional[str] = None,
+                   language: Optional[str] = None, q: Optional[str] = None, limit: int = 200,
+                   db_path: Optional[Path] = None) -> list[dict]:
+    """Newest first. Rows without content (written before Sprint 2) are skipped."""
+    sql, args = "SELECT * FROM campaigns WHERE content IS NOT NULL", []
+    for col, val in (("course_id", course_id), ("status", status), ("curriculum_id", curriculum_id),
+                     ("language", language)):
+        if val:
+            sql += f" AND {col}=?"
+            args.append(val)
+    if q:
+        sql += " AND (content LIKE ? OR strategy LIKE ?)"
+        args += [f"%{q}%"] * 2
+    sql += " ORDER BY coalesce(updated_at, created_at) DESC, rowid DESC LIMIT ?"
+    args.append(limit)
+    with connect(db_path) as conn:
+        return [_campaign_row(r) for r in conn.execute(sql, args)]
+
+
+def list_campaign_versions(campaign_id: str, db_path: Optional[Path] = None) -> list[dict]:
+    with connect(db_path) as conn:
+        rows = conn.execute("SELECT * FROM campaign_versions WHERE campaign_id=? ORDER BY version", (campaign_id,))
+        return [{**dict(r), "content": json.loads(r["content"])} for r in rows]
+
+
+def list_handoffs_to(to_agent: str, db_path: Optional[Path] = None) -> list[dict]:
+    with connect(db_path) as conn:
+        rows = conn.execute("SELECT * FROM handoff_events WHERE to_agent=? ORDER BY created_at DESC, rowid DESC",
+                            (to_agent,))
+        return [dict(r) for r in rows]

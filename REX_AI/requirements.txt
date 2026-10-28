@@ -2,11 +2,12 @@ fastapi>=0.110
 uvicorn[standard]>=0.29
 pydantic[email]>=2.6
 httpx>=0.27
-streamlit>=1.35
+streamlit>=1.66        # st.tabs(key=...) to switch tabs from code (Curriculum page)
 pyyaml>=6.0
 pytest>=8.0
 # Optional: natural-language replies via an LLM (REX works without it)
 openai>=1.30
+python-dotenv>=1.0        # loads .env (OPENAI_API_KEY, REX_RAG_EMBEDDINGS...)
 # Shared RAG pipeline (rex_ai/core/rag.py)
 chromadb>=1.0
 sentence-transformers>=3.0
@@ -22,3 +23,7 @@ scikit-learn>=1.4
 requests>=2.31
 beautifulsoup4>=4.12
 python-multipart>=0.0.9   # file uploads (POST /data/upload)
+# Curriculum Agent PDF export, with Arabic letter shaping and right-to-left ordering
+reportlab>=4.0
+arabic-reshaper>=3.0
+python-bidi>=0.4

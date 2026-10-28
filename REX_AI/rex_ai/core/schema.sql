@@ -150,10 +150,26 @@ CREATE TABLE IF NOT EXISTS rfps (
     dedupe_hash              TEXT NOT NULL UNIQUE,  -- duplicate detection
     source_id                TEXT NOT NULL REFERENCES data_sources(source_id),
     source_url               TEXT,
-    last_checked             TEXT NOT NULL
+    last_checked             TEXT NOT NULL,
+    source_title             TEXT,
+    relevance_score          REAL NOT NULL DEFAULT 0,
+    matched_course_ids       TEXT,                  -- JSON list
+    priority                 TEXT NOT NULL DEFAULT 'normal',
+    first_seen               TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_rfps_country_status ON rfps(country, status);
 CREATE INDEX IF NOT EXISTS idx_rfps_deadline ON rfps(deadline);
+
+-- Alerts for newly discovered relevant RFPs (Egypt = high priority, sent immediately)
+CREATE TABLE IF NOT EXISTS rfp_alerts (
+    alert_id    TEXT PRIMARY KEY,
+    rfp_id      TEXT NOT NULL REFERENCES rfps(rfp_id) ON DELETE CASCADE,
+    country     TEXT NOT NULL,
+    priority    TEXT NOT NULL,
+    message     TEXT NOT NULL,
+    channels    TEXT NOT NULL,                      -- JSON list: dashboard, log, webhook, email
+    created_at  TEXT NOT NULL
+);
 
 -- ----------------------------------------------------------------------------
 -- Curriculum and accreditation alignment - Member 2
@@ -181,6 +197,18 @@ CREATE TABLE IF NOT EXISTS curricula (
     created_at      TEXT NOT NULL,
     updated_at      TEXT NOT NULL
 );
+
+-- Every saved version of a curriculum (generation, reviewer revisions) - nothing is overwritten
+CREATE TABLE IF NOT EXISTS curriculum_versions (
+    curriculum_id  TEXT NOT NULL REFERENCES curricula(curriculum_id) ON DELETE CASCADE,
+    version        INTEGER NOT NULL,
+    content        TEXT NOT NULL,                   -- JSON Curriculum
+    change_note    TEXT,
+    changed_by     TEXT,
+    created_at     TEXT NOT NULL,
+    PRIMARY KEY (curriculum_id, version)
+);
+CREATE INDEX IF NOT EXISTS idx_curricula_filters ON curricula(department, skill_level, country, status);
 
 CREATE TABLE IF NOT EXISTS gap_reports (
     report_id      TEXT PRIMARY KEY,
@@ -214,7 +242,23 @@ CREATE TABLE IF NOT EXISTS documents (
     status         TEXT NOT NULL DEFAULT 'draft',
     sources        TEXT,                            -- JSON list
     emailed_to     TEXT,                            -- JSON list, only after approval
-    created_at     TEXT NOT NULL
+    created_at     TEXT NOT NULL,
+    content        TEXT,                            -- JSON DocumentRecord (sections, metadata) - Sprint 2
+    request        TEXT,                            -- JSON DocumentRequest
+    version        INTEGER NOT NULL DEFAULT 1,
+    updated_at     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_documents_filters ON documents(doc_type, status, course_id, curriculum_id);
+
+-- Every saved version of a document (generation, reviewer edits) - nothing is overwritten
+CREATE TABLE IF NOT EXISTS document_versions (
+    document_id  TEXT NOT NULL REFERENCES documents(document_id) ON DELETE CASCADE,
+    version      INTEGER NOT NULL,
+    content      TEXT NOT NULL,                     -- JSON DocumentRecord
+    change_note  TEXT,
+    changed_by   TEXT,
+    created_at   TEXT NOT NULL,
+    PRIMARY KEY (document_id, version)
 );
 
 -- ----------------------------------------------------------------------------
@@ -228,9 +272,16 @@ CREATE TABLE IF NOT EXISTS campaigns (
     strategy          TEXT,
     course_facts_used TEXT NOT NULL,                -- JSON snapshot of approved facts
     status            TEXT NOT NULL DEFAULT 'pending_approval',
-    created_at        TEXT NOT NULL
+    created_at        TEXT NOT NULL,
+    content           TEXT,                         -- JSON Campaign (variants, strategy plan, metadata) - Sprint 2
+    document_id       TEXT,
+    language          TEXT,
+    version           INTEGER NOT NULL DEFAULT 1,
+    updated_at        TEXT
 );
+CREATE INDEX IF NOT EXISTS idx_campaigns_filters ON campaigns(course_id, status);
 
+-- Current variants of each campaign (rewritten on every save; full history in campaign_versions)
 CREATE TABLE IF NOT EXISTS campaign_variants (
     variant_id   INTEGER PRIMARY KEY AUTOINCREMENT,
     campaign_id  TEXT NOT NULL REFERENCES campaigns(campaign_id) ON DELETE CASCADE,
@@ -239,6 +290,17 @@ CREATE TABLE IF NOT EXISTS campaign_variants (
     headline     TEXT,
     body         TEXT NOT NULL,
     cta          TEXT NOT NULL
+);
+
+-- Every saved version of a campaign (generation, reviewer edits, decisions) - nothing is overwritten
+CREATE TABLE IF NOT EXISTS campaign_versions (
+    campaign_id  TEXT NOT NULL REFERENCES campaigns(campaign_id) ON DELETE CASCADE,
+    version      INTEGER NOT NULL,
+    content      TEXT NOT NULL,                     -- JSON Campaign
+    change_note  TEXT,
+    changed_by   TEXT,
+    created_at   TEXT NOT NULL,
+    PRIMARY KEY (campaign_id, version)
 );
 
 -- ----------------------------------------------------------------------------

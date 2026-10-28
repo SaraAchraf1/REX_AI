@@ -1,0 +1,92 @@
+# REX AI — Industry skill requirements per department (Curriculum Agent, brief FR 19)
+#
+# SAMPLE: compiled by the team from public job postings in Egypt and Saudi Arabia and occupation profiles
+# (ESCO / O*NET, source ids SRC-INTL-ESCO / SRC-INTL-ONET, status to_verify). Replace or extend with the
+# academy's labour-market research. The agent uses these lists to add market-demanded topics to a curriculum
+# and to suggest the department when the request does not give one.
+#
+#   keywords      words in a course title that point to this department (English + Arabic)
+#   roles         typical job titles the course prepares for
+#   core_skills   technical skills employers ask for; used as candidate topics
+#   tools         tools and platforms named in job postings
+#   soft_skills   transferable skills; used for the general / transferable learning outcomes
+
+_meta:
+  source_id: SRC-CUR-INDUSTRY
+  status: sample
+  last_updated: 2026-10-24
+
+departments:
+  AI:
+    keywords: [ai, artificial intelligence, machine learning, deep learning, llm, generative ai, nlp, computer vision,
+               neural network, "ذكاء اصطناعي", "الذكاء الاصطناعي", "تعلم الآلة"]
+    industry: [Technology, Finance, Healthcare, Government]
+    roles: [Machine learning engineer, AI developer, Data scientist, AI product specialist]
+    core_skills: [Python for machine learning, Data preparation and feature engineering, Supervised and unsupervised learning,
+                  Model evaluation and validation, Deep learning with neural networks, Deploying models as APIs,
+                  Prompt engineering and LLM applications, Responsible AI and data privacy]
+    tools: [Python, scikit-learn, PyTorch, Jupyter, Hugging Face, Git]
+    soft_skills: [Explaining model results to non-technical stakeholders, Working in cross-functional teams, Ethical judgement]
+  Data:
+    keywords: [data analysis, data analytics, data science, power bi, tableau, sql, business intelligence, analytics,
+               "تحليل البيانات", "علم البيانات"]
+    industry: [Finance, Retail, Telecom, Government]
+    roles: [Data analyst, BI developer, Data engineer, Reporting specialist]
+    core_skills: [SQL querying, Data cleaning and transformation, Exploratory data analysis, Descriptive statistics,
+                  Data visualisation and dashboards, Data modelling, Storytelling with data, Data quality and governance]
+    tools: [Excel, SQL, Python, pandas, Power BI, Tableau]
+    soft_skills: [Presenting insights to decision makers, Business understanding, Attention to detail]
+  Software:
+    keywords: [software, web development, full-stack, frontend, backend, mobile app, programming, testing, qa,
+               devops, api, "تطوير البرمجيات", "البرمجة", "تطوير الويب", "اختبار البرمجيات"]
+    industry: [Technology, Banking, E-commerce]
+    roles: [Software developer, Web developer, QA engineer, Mobile developer]
+    core_skills: [Programming fundamentals, Version control with Git, Web APIs and REST, Databases and SQL,
+                  Software testing and quality assurance, Secure coding practices, Agile delivery, Deployment basics]
+    tools: [Git, VS Code, JavaScript, Python, Docker, Postman]
+    soft_skills: [Code review etiquette, Teamwork in agile teams, Technical documentation]
+  Cloud:
+    keywords: [cloud, aws, azure, gcp, devops, kubernetes, docker, "الحوسبة السحابية", "السحابة"]
+    industry: [Technology, Telecom, Banking, Government]
+    roles: [Cloud engineer, DevOps engineer, Solutions architect, Site reliability engineer]
+    core_skills: [Cloud computing concepts, Identity and access management, "Compute, storage and networking services",
+                  Infrastructure as code, Containers and orchestration, CI/CD pipelines, Monitoring and cost optimisation,
+                  Cloud security and shared responsibility]
+    tools: [AWS, Azure, Terraform, Docker, Kubernetes, GitHub Actions]
+    soft_skills: [Incident communication, Documentation of architecture decisions, Collaboration with development teams]
+  Cybersecurity:
+    keywords: [cybersecurity, cyber security, security, ethical hacking, penetration testing, soc, iso 27001,
+               "الأمن السيبراني", "أمن المعلومات"]
+    industry: [Banking, Government, Telecom, Energy]
+    roles: [SOC analyst, Security engineer, Penetration tester, GRC specialist]
+    core_skills: [Networking and security fundamentals, "Threats, vulnerabilities and attacks", Security controls and hardening,
+                  Identity and access management, Security monitoring and incident response, Vulnerability assessment,
+                  "Governance, risk and compliance", Cryptography basics]
+    tools: [Wireshark, Nmap, SIEM, Kali Linux, Burp Suite]
+    soft_skills: [Clear incident reporting, Ethical conduct, Working under pressure]
+  Business:
+    keywords: [project management, pmp, agile, scrum, marketing, digital marketing, business, management, leadership,
+               "إدارة المشاريع", "التسويق", "إدارة الأعمال"]
+    industry: [Construction, Technology, Consulting, Government]
+    roles: [Project manager, Scrum master, Marketing specialist, Business analyst]
+    core_skills: [Planning and scoping, Stakeholder management, Risk management, Budgeting and cost control,
+                  Agile and Scrum practices, Performance measurement and KPIs, Digital marketing channels, Reporting to management]
+    tools: [MS Project, Jira, Excel, Google Analytics, Meta Ads Manager]
+    soft_skills: [Leadership, Negotiation, Business communication]
+  Professional Development:
+    keywords: [train the trainer, tot, soft skills, communication, presentation, leadership, coaching, "تدريب المدربين",
+               "المهارات الشخصية"]
+    industry: [Education, Corporate training, Government]
+    roles: [Trainer, Training coordinator, Team leader, Learning and development specialist]
+    core_skills: [Adult learning principles, Training needs analysis, Designing learning objectives, Facilitation techniques,
+                  Presentation skills, Evaluating training effectiveness, Coaching and feedback]
+    tools: [PowerPoint, LMS platforms, Online whiteboards]
+    soft_skills: [Public speaking, Active listening, Emotional intelligence]
+  Healthcare:
+    keywords: [healthcare, health, medical, nursing, hospital, clinical, patient, "الرعاية الصحية", "التمريض", "طبي"]
+    industry: [Healthcare]
+    roles: [Healthcare administrator, Quality and patient safety officer, Health informatics specialist]
+    core_skills: [Healthcare systems and regulations, Patient safety and quality improvement, Infection control,
+                  Health information management, Clinical documentation, Healthcare data analysis]
+    tools: [Electronic health records, Excel, Quality dashboards]
+    soft_skills: [Patient communication, Teamwork in clinical settings, Ethical practice and confidentiality]
