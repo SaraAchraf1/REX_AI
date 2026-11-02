@@ -18,11 +18,12 @@ import pandas as pd
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from frontend.ui import api, no_fog  # noqa: E402
+from frontend.ui import api, no_fog, require  # noqa: E402
 from rex_ai import config  # noqa: E402
 
 st.set_page_config(page_title="REX - Curriculum", page_icon="📚", layout="wide")
 no_fog()
+require("admin")                                 # administrators only (frontend/ui.py)
 
 STATUS = {"draft": "📝 draft", "pending_approval": "⏳ pending approval", "changes_requested": "✏️ changes requested",
           "approved": "✅ approved", "rejected": "⛔ rejected"}

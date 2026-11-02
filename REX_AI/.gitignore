@@ -10,3 +10,5 @@ data/kb/
 outputs/
 data/chroma/
 data/raw/
+.neon
+node_modules/

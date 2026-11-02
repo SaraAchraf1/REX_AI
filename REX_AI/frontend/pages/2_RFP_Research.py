@@ -15,12 +15,13 @@ import pandas as pd
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from frontend.ui import api, no_fog  # noqa: E402
+from frontend.ui import api, no_fog, require  # noqa: E402
 from rex_ai import config  # noqa: E402
 from rex_ai.core.schemas import RFPCategory, RFPStatus  # noqa: E402
 
 st.set_page_config(page_title="REX - RFP Research", page_icon="📑", layout="wide")
 no_fog()
+require("admin")                                 # administrators only (frontend/ui.py)
 
 COUNTRY = {"EG": "🇪🇬 Egypt", "SA": "🇸🇦 Saudi Arabia"}
 FIT = {"likely": "🟢 likely", "possible": "🟡 possible", "unlikely": "🔴 unlikely", "unknown": "⚪ unknown"}
@@ -68,14 +69,24 @@ def list_rfps(params: dict) -> list[dict]:
     return [r.model_dump(mode="json") for r in local_agent().search(**params)]
 
 
-def set_status(rfp_id: str, status: str, reviewer: str, comment: str) -> None:
-    payload = {"status": status, "reviewer": reviewer, "comment": comment}
+def set_status(rfp_id: str, status: str, reviewer: str, comment: str, email: str = "") -> None:
+    """Raises ValueError with the reason if the decision or the qualified-tender e-mail failed."""
+    payload = {"status": status, "reviewer": reviewer, "comment": comment, "email": email or None}
     if API:
-        api().patch(f"{config.API_URL}/rfp/{rfp_id}/status", json=payload, timeout=10).raise_for_status()
+        r = api().patch(f"{config.API_URL}/rfp/{rfp_id}/status", json=payload, timeout=60)
+        if r.status_code >= 400:
+            body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+            raise ValueError(body.get("message") or body.get("detail") or r.text)
         return
-    from rex_ai.core import db
-    db.update_rfp_status(rfp_id, status)
-    db.log_event("INFO", "rfp_review", agent="rfp_research", detail=f"{rfp_id}:{status} by {reviewer}: {comment}")
+    from pydantic import ValidationError
+    from rex_ai.agents.rfp.agent import RFPResearchAgent
+    from rex_ai.core.schemas import RFPStatusUpdate
+    try:
+        RFPResearchAgent.set_status(rfp_id, RFPStatusUpdate(**payload))
+    except ValidationError:
+        raise ValueError(f"{email} is not a valid e-mail address")
+    except RuntimeError as exc:                     # MailError: the status is saved, the e-mail was not sent
+        raise ValueError(str(exc))
 
 
 def ask(question: str, country: str | None) -> dict:
@@ -109,6 +120,8 @@ def upload(name: str, content: bytes) -> str:
     folder.mkdir(parents=True, exist_ok=True)
     path = data_sync._unique_path(folder, data_sync._safe_name(name))
     path.write_bytes(content)
+    from rex_ai.core import filestore
+    filestore.push()                             # shared database: other servers get the file too
     return path.name
 
 
@@ -227,15 +240,25 @@ with tab_pipeline:
             with st.form(f"review_{chosen}"):
                 new_status = st.selectbox("Decision", ["qualified", "rejected", "flagged_review", "monitoring"],
                                           help="qualified = prepare a bid; rejected = no bid")
-                reviewer = st.text_input("Reviewer")
+                reviewer = st.text_input("Reviewer", key="rfp_reviewer")
                 comment = st.text_input("Comment")
+                email = st.text_input("Email", key="rfp_email", placeholder="bids@academy.example",
+                                      help="When the decision is qualified, the tender details are e-mailed here")
                 if st.form_submit_button("Save decision"):
                     if not reviewer.strip():
                         st.warning("Enter the reviewer's name.")
                     else:
-                        set_status(chosen, new_status, reviewer, comment)
-                        st.success(f"{chosen} -> {new_status}")
-                        st.rerun()
+                        try:
+                            with st.spinner("Saving" + (" and e-mailing..." if new_status == "qualified"
+                                                        and email.strip() else "...")):
+                                set_status(chosen, new_status, reviewer, comment, email.strip())
+                            sent = new_status == "qualified" and email.strip()
+                            st.session_state.rfp_notice = f"{chosen} -> {new_status}" +                                 (f" · e-mailed to {email.strip()}" if sent else "")
+                            st.rerun()
+                        except (ValueError, httpx.HTTPError) as exc:
+                            st.error(str(exc))
+            if note := st.session_state.pop("rfp_notice", None):
+                st.success(note)
 
 with tab_ask:
     st.caption("Semantic search (RAG) over the stored tenders and their documents, with citations.")
@@ -252,11 +275,12 @@ with tab_ask:
 
 with tab_alerts:
     st.caption("Egypt tenders are alerted immediately (high priority); Saudi tenders in one digest per run. "
-               "Set REX_RFP_WEBHOOK_URL or REX_RFP_ALERT_EMAILS to also send them to Slack/Teams/e-mail.")
+               "Set REX_RFP_WEBHOOK_URL or REX_RFP_ALERT_EMAILS to also send them to Slack/Teams/e-mail. "
+               "✅ = a qualified tender e-mailed to the address given with the decision.")
     items = alerts()
     if not items:
         st.write("No alerts yet.")
     for a in items:
-        icon = "🔴" if a["priority"] == "high" else "🔵"
+        icon = {"high": "🔴", "qualified": "✅"}.get(a["priority"], "🔵")
         st.write(f"{icon} `{a['created_at']}` **{a['rfp_id']}** - {a['message']}  \n"
                  f"<small>channels: {', '.join(a['channels'])}</small>", unsafe_allow_html=True)

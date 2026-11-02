@@ -12,11 +12,39 @@ except ImportError:
     pass
 DATA_DIR = Path(os.getenv("REX_DATA_DIR", ROOT_DIR / "data"))
 DB_PATH = Path(os.getenv("REX_DB_PATH", ROOT_DIR / "rex_ai.db"))
+# Shared database: every action is stored on this PostgreSQL server and seen by every machine that uses it,
+# e.g. postgresql://user:password@host:5432/rex (Neon, Supabase, Render, RDS...). Empty = local SQLite file DB_PATH.
+# Neon writes a pooled URL (host ...-pooler..., PgBouncer transaction mode) for the app's queries and a direct one
+# for creating / migrating tables and session settings, under either naming:
+#   DATABASE_URL (pooled) + DATABASE_URL_UNPOOLED (direct)   or   DATABASE_URL_POOLED (pooled) + DATABASE_URL (direct)
+_POOLED = os.getenv("DATABASE_URL_POOLED", "")
+DATABASE_URL = os.getenv("REX_DATABASE_URL") or _POOLED or os.getenv("DATABASE_URL") or ""
+DATABASE_URL_DIRECT = (os.getenv("REX_DATABASE_URL_DIRECT") or os.getenv("DATABASE_URL_UNPOOLED")
+                       or (os.getenv("DATABASE_URL", "") if _POOLED and not os.getenv("REX_DATABASE_URL") else ""))
+DB_SCHEMA = os.getenv("REX_DB_SCHEMA", "")              # optional PostgreSQL schema (e.g. one per environment)
+DB_POOL_SIZE = int(os.getenv("REX_DB_POOL_SIZE", "5"))
+# Store uploaded/merged data files in the database and restore them on every server (default: on with a shared DB)
+SHARED_FILES = os.getenv("REX_SHARED_FILES", "1" if DATABASE_URL else "0") == "1"
+FILE_SYNC_SECONDS = float(os.getenv("REX_FILE_SYNC_SECONDS", "60"))   # how often a server checks for new files
+
+# ---- Accounts (rex_ai/core/auth.py) ------------------------------------------
+# Code needed to sign up as an administrator (the very first administrator can sign up without it).
+# Empty = new administrators only by promotion from the Users page or `python -m rex_ai.core.auth`.
+ADMIN_SIGNUP_CODE = os.getenv("REX_ADMIN_SIGNUP_CODE", "")
+LOGIN_DAYS = float(os.getenv("REX_LOGIN_DAYS", "7"))                   # how long a login stays valid
+# 1 = the API needs a login token (Authorization: Bearer ...); 0 = open API (tests, local scripts)
+API_AUTH = os.getenv("REX_API_AUTH", "1") == "1"
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 # Set REX_USE_LLM=0 to force the deterministic (no-LLM) mode, e.g. in tests and demos without a key.
 USE_LLM = os.getenv("REX_USE_LLM", "1") == "1" and bool(OPENAI_API_KEY)
+# Change requests ("make the capstone about retail", "shorten the LinkedIn post") in the Curriculum, Document and
+# Marketing agents are applied by Gemini (OpenAI-compatible endpoint); generation and every other agent use OpenAI.
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
+GEMINI_BASE_URL = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/")
+USE_GEMINI = os.getenv("REX_USE_LLM", "1") == "1" and bool(GEMINI_API_KEY)
 
 # "localhost" makes Windows try IPv6 first; uvicorn listens on IPv4 only, so every call waited ~2 s
 API_URL = os.getenv("REX_API_URL", "http://127.0.0.1:8000").replace("//localhost", "//127.0.0.1")

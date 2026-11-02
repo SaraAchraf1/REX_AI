@@ -24,12 +24,12 @@ from rex_ai.agents.rex.text_utils import contains_any, normalize
 from rex_ai.agents.rfp import llm
 from rex_ai.agents.rfp.dedupe import dedupe_hash, is_duplicate
 from rex_ai.agents.rfp.extract import RawOpportunity, classify, detect_country, matched_terms, parse_date
-from rex_ai.agents.rfp.notify import COUNTRY_NAMES, notify
+from rex_ai.agents.rfp.notify import COUNTRY_NAMES, notify, send_qualified
 from rex_ai.agents.rfp.qualify import Qualifier
 from rex_ai.agents.rfp.sources import Source, build_sources, load_registry, rag_or_none
-from rex_ai.core import db
+from rex_ai.core import db, mailer
 from rex_ai.core.schemas import (AgentName, Country, RFPAskRequest, RFPAskResponse, RFPRecord, RFPRunRequest,
-                                 RFPRunResult, RFPStatus, SourceRef)
+                                 RFPRunResult, RFPStatus, RFPStatusUpdate, SourceRef)
 
 log = logging.getLogger("rex.rfp")
 
@@ -311,6 +311,27 @@ class RFPResearchAgent:
             text = f"{r.title} {r.issuing_organization} {r.eligibility_requirements or ''} {r.summary or ''}"
             return not req.keywords or bool(matched_terms(text, req.keywords))
         return sorted((r for r in records if keep(r)), key=lambda r: self.rank(r, req.priority_organizations))
+
+    @staticmethod
+    def set_status(rfp_id: str, update: RFPStatusUpdate) -> Optional[RFPRecord]:
+        """Reviewer decision. Marked qualified with an e-mail address -> the tender is e-mailed there at once.
+        Returns None if the tender does not exist; raises mailer.MailError (status already saved) if not sent."""
+        if not db.update_rfp_status(rfp_id, update.status.value):
+            return None
+        db.log_event("INFO", "rfp_review", agent=AgentName.rfp_research.value,
+                     detail=f"{rfp_id}:{update.status.value} by {update.reviewer}: {update.comment or ''}")
+        rec = row_to_record(db.get_rfp(rfp_id))
+        if update.status == RFPStatus.qualified and update.email:
+            try:
+                send_qualified(rec.model_dump(mode="json"), str(update.email), update.reviewer, update.comment or "")
+            except mailer.MailError as exc:
+                db.log_event("ERROR", "rfp_qualified_email", agent=AgentName.rfp_research.value,
+                             detail=f"{rfp_id} -> {update.email}: {exc}")
+                raise mailer.MailError(f"{rfp_id} is now qualified, but the e-mail to {update.email} was not sent: "
+                                       f"{str(exc).removeprefix('E-mail not sent: ')}") from exc
+            db.log_event("INFO", "rfp_qualified_email", agent=AgentName.rfp_research.value,
+                         detail=f"{rfp_id} -> {update.email} by {update.reviewer}")
+        return rec
 
     def search(self, country: Optional[str] = None, status: Optional[str] = None, category: Optional[str] = None,
                qualification: Optional[str] = None, q: Optional[str] = None,

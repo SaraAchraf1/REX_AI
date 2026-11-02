@@ -23,13 +23,74 @@ python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\
 pip install -r requirements.txt
 python scripts/build_kb.py                             # validate data + export the knowledge base
 uvicorn rex_ai.api.main:app --reload                   # API on http://localhost:8000 (docs at /docs)
-streamlit run frontend/streamlit_app.py                # chat UI on http://localhost:8501
+streamlit run frontend/streamlit_app.py                # web app on http://localhost:8501 (log in / sign up)
 pytest -q                                              # 25 tests
 ```
 
 The UI calls the API when it is running and falls back to running the assistant in-process otherwise.
 Set `OPENAI_API_KEY` (see `.env.example`) to have an LLM phrase replies; recommendations, prices and
 dates still come only from the data files. Without a key REX uses its deterministic responder.
+
+**Change requests use Gemini.** In the Curriculum, Documents and Marketing pages, a plain-language request
+("add a Power BI module", "set the scenario in Cairo", "make the LinkedIn post shorter") is applied by Gemini
+(`GEMINI_API_KEY`, `GEMINI_MODEL`; generation and every other agent keep using OpenAI). Any part can change on
+request: curriculum modules/hours/outcomes, document sections (locked fact sections too), new or removed sections and
+the title, campaign variants and strategy (numbers the reviewer writes in the request count as approved). If it cannot do it - no credits left, wrong key, rate limit, network, an unusable answer -
+nothing is changed and the reviewer sees the reason (API: `503 llm_unavailable`). Fields edited directly (sections,
+variants, JSON) never need the LLM; without any key the curriculum still understands simple instructions
+("set hours to 48", "remove topic X").
+
+## Accounts: users and administrators
+
+`streamlit run frontend/streamlit_app.py` opens a **Log in / Sign up** page. Two kinds of account:
+
+| Account | Can use | History |
+| --- | --- | --- |
+| **User** | REX Course Assistant (chat) | their own conversations only - listed in the sidebar, stored under their account; nobody else can open or continue them |
+| **Administrator** | REX Course Assistant + RFP Research, Curriculum, Documents, Marketing, Users | own conversations, plus everything administrators create (tenders, curricula, documents, campaigns, reviews) is shared: every administrator sees every update |
+
+- The **first administrator** signs up without a code. After that, signing up as an administrator needs
+  `REX_ADMIN_SIGNUP_CODE` (set it in `.env`); or an administrator promotes a user on the **Users** page, or on the
+  server: `python -m rex_ai.core.auth create-admin --email dean@academy.example --name "Dean"`.
+- Passwords are stored only as salted PBKDF2-SHA256 hashes. A login lasts `REX_LOGIN_DAYS` (7) and survives a page
+  reload (browser cookie); **Log out** ends it on the server too.
+- The API checks the same rules: `POST /auth/signup` or `/auth/login` returns a token; send it as
+  `Authorization: Bearer <token>`. Without a token only `/health`, `/courses` and `/auth/*` answer; a user's token
+  reaches `/chat`, `/chat/sessions`, `/chat/{id}/history` and `/leads`; everything else needs an administrator.
+  `REX_API_AUTH=0` switches the check off (used by the test suite).
+
+## Shared database (all history in one place)
+
+Every action - chats, leads, tenders, curricula, documents, campaigns, reviews, versions, handoffs, jobs, logs and
+uploaded data files - is saved through `rex_ai/core/db.py`. Point every machine or server at the same PostgreSQL
+database and they all show the same history:
+
+1. The project is set up on **Neon** (`neon.ts`, project `jolly-salad-68654610`, branch `production`). On a new
+   machine: `npm i -g neon@latest`, `neon login`, then `neon env pull` (or `neon deploy`) writes the connection
+   strings into `.env`: the pooled one (host `...-pooler...`) is used for the app's queries, the direct one for
+   creating and migrating tables - both naming styles (`DATABASE_URL` + `DATABASE_URL_POOLED`, or `DATABASE_URL` +
+   `DATABASE_URL_UNPOOLED`) are recognised. Any other PostgreSQL works too with
+   `REX_DATABASE_URL=postgresql://user:password@host:5432/dbname?sslmode=require` (never commit `.env`).
+2. `npm run build` compiles every module, `npm start` starts the API, `npm run db:status` shows which database is
+   used and the rows per table.
+3. Start the app as usual - the tables are created and the academy data loaded on the first start. To bring the
+   history you already have in the local `rex_ai.db` into the shared database, once:
+
+```bash
+python -m rex_ai.core.db status                       # which database is used + rows per table
+python -m rex_ai.core.db migrate --from rex_ai.db     # copy the local history (safe to run twice)
+```
+
+| What | Where it is kept with a shared database |
+| --- | --- |
+| Chats, leads, RFPs and alerts, curricula + versions + gap reports, documents + versions, campaigns + versions, reviews, handoffs, job runs, logs | PostgreSQL tables (`schema.sql`) |
+| Uploaded catalogues / documents, tender feeds, merged course data (`data/*.json`) | `stored_files` table; every server restores them within `REX_FILE_SYNC_SECONDS` (`rex_ai/core/filestore.py`). The database copy wins - after editing `data/*.json` by hand run `python -m rex_ai.core.db push-files` |
+| PDFs (curricula, documents, campaign briefs) | rebuilt from the database on any server when downloaded |
+| A chat conversation | the link `?chat=<id>` reopens it from the database on any server |
+| Search indexes (`data/chroma`) | rebuilt automatically from the data files |
+
+Without `REX_DATABASE_URL` the app uses a local SQLite file (`rex_ai.db`), as before; the tests always do, unless
+`REX_TEST_DATABASE_URL` is set - then the whole suite runs on PostgreSQL in a throw-away schema.
 
 ## What REX Assistant does (Sprint 1)
 
@@ -262,7 +323,7 @@ edit (sections / instructions) ──> v2 draft     review: submit ──> appro
 | Export to PDF | `pdf.py` (reportlab, same look as the curriculum PDF): sections, tables, notes boxes, sources, review history; DRAFT watermark until approved; question banks marked CONFIDENTIAL |
 | Arabic and English | every heading and generated sentence exists in both; Arabic PDFs are shaped right-to-left; the language follows the curriculum unless asked |
 | Review and edit | `PATCH /documents/{id}`: replace / add / remove sections, change the title, or plain-language instructions (LLM) → new version, nothing overwritten (`document_versions`); `POST /documents/{id}/review` |
-| Downloads and e-mail after approval | `GET /documents/{id}/download`; `POST /documents/{id}/email` only for approved documents (SMTP via `REX_SMTP_*`, otherwise an `.eml` file in `outputs/documents/outbox/`); `email_to` on the request is sent automatically on approval |
+| Downloads and e-mail after approval | `GET /documents/{id}/download`; `POST /documents/{id}/email` only for approved documents really sent over SMTP (`REX_SMTP_*`, e.g. Gmail with an App Password); nothing is queued - without SMTP or on a refused send the API answers `502 email_failed` with the reason; `email_to` on the request is sent automatically on approval (a failure is shown on the document and the address stays pending) |
 | Agent-to-agent workflow (brief §4) | approved curricula appear in `GET /documents/handoffs` (one click creates a document pack); a document built from a curriculum can be approved only if that curriculum is approved and unchanged; approval emits `HandoffEvent document → marketing` |
 | Templates and reference documents (brief §11) | `data/doc_templates/references/` (one sample example per type, indexed in the RAG collection `doc_templates` with metadata `doc_type`); replace them with the academy's documents (PDF, Word or Markdown) and a line in `manifest.yaml` |
 | Never claim accreditation | the Curriculum Agent's claim guard runs on generated, LLM and edited text; alignment is always shown with its disclaimer |

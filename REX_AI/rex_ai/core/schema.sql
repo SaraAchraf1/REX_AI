@@ -96,6 +96,28 @@ CREATE TABLE IF NOT EXISTS faqs (
     q_en TEXT, a_en TEXT, q_ar TEXT, a_ar TEXT
 );
 
+-- ----------------------------------------------------------------------------
+-- Accounts (rex_ai/core/auth.py) - Member 3
+--   user   uses the REX Course Assistant; sees only their own conversations
+--   admin  uses every agent; curricula, documents, campaigns and tenders are shared by all administrators
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS users (
+    user_id        TEXT PRIMARY KEY,
+    email          TEXT NOT NULL UNIQUE,             -- stored lower-case
+    name           TEXT NOT NULL,
+    role           TEXT NOT NULL CHECK (role IN ('user','admin')),
+    password_hash  TEXT NOT NULL,                    -- pbkdf2_sha256$iterations$salt$hash, never the password
+    created_at     TEXT NOT NULL,
+    last_login_at  TEXT
+);
+
+CREATE TABLE IF NOT EXISTS auth_tokens (
+    token_hash  TEXT PRIMARY KEY,                    -- sha256 of the login token (the token itself is not stored)
+    user_id     TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    created_at  TEXT NOT NULL,
+    expires_at  TEXT NOT NULL
+);
+
 -- REX conversations and consented leads - Member 1
 CREATE TABLE IF NOT EXISTS chat_sessions (
     session_id  TEXT PRIMARY KEY,
@@ -103,7 +125,8 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
     profile     TEXT NOT NULL DEFAULT '{}',          -- JSON LeadProfile
     stage       TEXT NOT NULL DEFAULT 'discovery',
     created_at  TEXT NOT NULL,
-    updated_at  TEXT NOT NULL
+    updated_at  TEXT NOT NULL,
+    user_id     TEXT                                 -- owner account (NULL = conversation from before accounts)
 );
 
 CREATE TABLE IF NOT EXISTS chat_messages (
@@ -126,6 +149,7 @@ CREATE TABLE IF NOT EXISTS leads (
     consent               INTEGER NOT NULL CHECK (consent = 1),   -- no consent, no row
     consent_at            TEXT NOT NULL,
     created_at            TEXT NOT NULL,
+    user_id               TEXT,                     -- account that was signed in, if any
     CHECK (email IS NOT NULL OR phone IS NOT NULL)
 );
 
@@ -324,6 +348,16 @@ CREATE TABLE IF NOT EXISTS handoff_events (
     payload_type TEXT NOT NULL,
     payload_id   TEXT NOT NULL,
     created_at   TEXT NOT NULL
+);
+
+-- Files the app adds to data/ (uploaded catalogues and documents, tender feeds, merged course data). With a
+-- shared database they are stored here too, so every server restores the same files (rex_ai/core/filestore.py).
+CREATE TABLE IF NOT EXISTS stored_files (
+    path        TEXT PRIMARY KEY,                   -- relative to data/, e.g. catalog/spring_catalog.pdf
+    content     BLOB NOT NULL,
+    sha256      TEXT NOT NULL,
+    size        INTEGER NOT NULL,
+    updated_at  TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS app_logs (

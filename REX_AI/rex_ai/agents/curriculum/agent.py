@@ -28,10 +28,10 @@ from rex_ai.agents.curriculum import frameworks as fw
 from rex_ai.agents.curriculum import llm
 from rex_ai.agents.curriculum.alignment import Aligner
 from rex_ai.agents.curriculum.generator import HOURS_PER_WEEK, T, CurriculumBuilder, finalize, guard_claims, \
-    split_hours
+    normalize_weights, rescale_hours, split_hours
 from rex_ai.agents.curriculum.research import infer_department, research
 from rex_ai.agents.curriculum.revise import apply_instructions
-from rex_ai.core import db
+from rex_ai.core import db, llm_status
 from rex_ai.core.schemas import (AgentName, ApprovalStatus, Curriculum, CurriculumImport, CurriculumRequest,
                                  CurriculumResearch, CurriculumRevision, FrameworkInfo, GapReport, ReviewAction,
                                  SourceRef)
@@ -123,6 +123,8 @@ class CurriculumAgent:
         evidence = draft.pop("evidence")
         generated_by = "rules"
         refined = llm.refine(filled, draft, bundle.context, lang) if llm.enabled() else None
+        if llm.enabled() and refined is None and llm_status.reason():
+            bundle.summary.notes.append(f"LLM not used: {llm_status.reason()}")
         if refined and _valid_content({**draft, **refined}):
             draft, removed = finalize({**copy.deepcopy(draft), **refined}, filled, lang)
             generated_by = "llm"
@@ -299,15 +301,19 @@ class CurriculumAgent:
             if "modules" in rev.content and "training_hours" not in rev.content:
                 data["training_hours"] = float(sum(float(m.get("hours") or 0) for m in data["modules"]))
             applied.append("edited: " + ", ".join(sorted(rev.content)))
-        if rev.instructions:
-            done = llm.revise(data, rev.instructions, lang) if llm.enabled() else None
-            if done and _valid_content({**data, **done}):
-                data.update(done)
-                applied.append(f"LLM applied: {rev.instructions[:200]}")
-            else:
-                data, ok, ko = apply_instructions(data, rev.instructions, capstone_title=T[lang]["capstone_module"])
-                applied += ok
-                not_applied += ko
+        if rev.instructions and llm.edit_enabled():
+            # the LLM applies the request; if it cannot, nothing is changed and the reviewer is told why
+            done = llm.revise(data, rev.instructions, lang)
+            if not (done and _valid_content({**data, **done})):
+                raise llm_status.unavailable("curriculum")
+            data.update(done)
+            rescale_hours(data["modules"], float(data["training_hours"]))   # module hours add up to the total
+            normalize_weights(data["assessments"])                        # weights add up to 100%
+            applied.append(f"LLM applied: {rev.instructions[:200]}")
+        elif rev.instructions:                    # no Gemini configured: simple rule-based instructions only
+            data, ok, ko = apply_instructions(data, rev.instructions, capstone_title=T[lang]["capstone_module"])
+            applied += ok
+            not_applied += ko
         data, removed = guard_claims(data)
         try:
             new = Curriculum(**data)

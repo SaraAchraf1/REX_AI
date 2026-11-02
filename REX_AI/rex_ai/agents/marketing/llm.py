@@ -4,6 +4,9 @@ the agent keeps the rule-based copy - the workflow never depends on the LLM.
 Safety: the model gets the approved FACTS, the audience persona and the brand rules / channel playbook / examples
 from the RAG (marketing_refs). Whatever it returns goes through checks.check_variant: a variant with a number that
 is not in the facts is rejected, claims are rewritten and channel limits enforced.
+
+refine() (generation) uses OpenAI; revise() (a reviewer's change request) uses Gemini and may change any variant and
+the strategy. Numbers the reviewer writes in the request (a new fee, a discount, a date) count as approved.
 """
 from __future__ import annotations
 
@@ -14,6 +17,7 @@ from typing import Optional
 from pydantic import ValidationError
 
 from rex_ai import config
+from rex_ai.core import gemini, llm_status
 from rex_ai.agents.marketing import checks, rules
 from rex_ai.core.schemas import ContentVariant
 
@@ -32,7 +36,13 @@ def enabled() -> bool:
     return config.USE_LLM
 
 
+def edit_enabled() -> bool:
+    """Change requests are applied by Gemini."""
+    return gemini.enabled()
+
+
 def _chat(messages: list[dict], temperature: float = 0.6) -> Optional[dict]:
+    llm_status.clear()
     if not config.USE_LLM:
         return None
     try:
@@ -43,6 +53,7 @@ def _chat(messages: list[dict], temperature: float = 0.6) -> Optional[dict]:
         return json.loads(resp.choices[0].message.content)
     except Exception as exc:
         log.warning("Marketing LLM call failed, keeping the rule-based copy: %s", exc)
+        llm_status.record(exc)
         return None
 
 
@@ -115,14 +126,19 @@ def refine(variants: list[ContentVariant], facts: dict, audience: dict, strategy
     return data.get("variants") if isinstance(data, dict) else None
 
 
-def revise(variants: list[ContentVariant], facts: dict, instructions: str, lang: str) -> Optional[list]:
-    """Apply a reviewer's plain-language change request; returns only the variants the model changed."""
+def revise(variants: list[ContentVariant], facts: dict, strategy: str, instructions: str, lang: str
+           ) -> Optional[dict]:
+    """Apply a reviewer's plain-language change request (Gemini); returns {variants: [changed ones], strategy}."""
     language = "Arabic" if lang == "ar" else "English"
-    data = _chat([
-        {"role": "system", "content": SYSTEM},
+    data = gemini.chat_json([
+        {"role": "system", "content": SYSTEM.replace("Use ONLY the facts in FACTS:",
+                                                     "Use ONLY the facts in FACTS and in the REVIEWER REQUEST:")},
         {"role": "user", "content":
             f"FACTS:\n{json.dumps(facts, ensure_ascii=False, default=str)}\n\nCHANNEL LIMITS:\n{_limits(variants)}\n\n"
-            f"VARIANTS:\n{json.dumps(_payload(variants), ensure_ascii=False)}\n\nREVIEWER REQUEST:\n{instructions}\n\n"
-            f"Apply the reviewer's request and change nothing else. Write in {language}. Return JSON "
-            "{\"variants\": [only the variants you changed, with channel and variant_no]}."}], temperature=0.3)
-    return data.get("variants") if isinstance(data, dict) else None
+            f"STRATEGY:\n{strategy}\n\nVARIANTS:\n{json.dumps(_payload(variants), ensure_ascii=False)}\n\n"
+            f"REVIEWER REQUEST:\n{instructions}\n\nApply the reviewer's request and change nothing else. Any variant "
+            "(headline, body, CTA, tone, length, angle) and the strategy may change if the reviewer asks; facts the "
+            f"reviewer gives (fees, discounts, dates) may be used. Write in {language}. Return JSON "
+            "{\"variants\": [only the variants you changed, with channel and variant_no], "
+            "\"strategy\": the new strategy text, or null if unchanged}."}], temperature=0.3)
+    return data if isinstance(data, dict) else None

@@ -86,13 +86,17 @@ def get_assistant(always: bool = False):
     """The current RexAssistant, rebuilt when the data changed since it was created."""
     from rex_ai.agents.rex.assistant import RexAssistant
     from rex_ai.agents.rex.knowledge_base import get_kb
-    from rex_ai.core import db
+    from rex_ai.core import db, filestore
     with _lock:
+        if _state["assistant"] is None and filestore.enabled():
+            db.init_db(seed=False)                 # tables exist before the first restore
+        filestore.pull(force=_state["assistant"] is None)   # files uploaded on other servers (throttled)
         if _state["assistant"] is not None and not always and signature() == _state["signature"]:
             return _state["assistant"]
         _state["last_sync"] = sync(always)
         get_kb.cache_clear()
         db.init_db()                               # upserts the merged courses into the database
+        filestore.push()                           # uploads and merged data -> shared database
         _state["assistant"] = RexAssistant()
         _state["signature"] = signature()
         return _state["assistant"]

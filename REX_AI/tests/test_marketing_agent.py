@@ -16,6 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+from rex_ai.core.llm_status import LLMUnavailable
 from rex_ai import config
 from rex_ai.agents.curriculum.agent import CurriculumAgent
 from rex_ai.agents.documents.agent import DocumentAgent
@@ -330,8 +331,9 @@ def test_edit_creates_a_new_version(agent):
     edited = next(x for x in out.variants if x.key == v.key)
     assert edited.generated_by.startswith("reviewer") and any("01000000000" in c_ for c_ in edited.checks)
     assert out.strategy == "Focus on WhatsApp leads first."
-    nothing = agent.edit(c.campaign_id, CampaignEdit(reviewer="Ms Salma", instructions="make it shorter"))
-    assert nothing.version == 2 and nothing.metadata["last_edit"]["not_applied"]   # needs the LLM
+    with pytest.raises(LLMUnavailable, match="Nothing was changed"):              # instructions need the LLM
+        agent.edit(c.campaign_id, CampaignEdit(reviewer="Ms Salma", instructions="make it shorter"))
+    assert agent.get(c.campaign_id).version == 2                                    # nothing was changed
     versions = agent.history(c.campaign_id)["versions"]
     assert [x["version"] for x in versions] == [1, 2]
     with pytest.raises(ValidationError):
@@ -357,6 +359,8 @@ def test_brief_pdf(agent, campaign):
 def _fake_llm(monkeypatch, response):
     monkeypatch.setattr(config, "USE_LLM", True)
     monkeypatch.setattr(llm, "_chat", lambda messages, temperature=0.6: response)
+    monkeypatch.setattr(config, "USE_GEMINI", True)                          # change requests go to Gemini
+    monkeypatch.setattr(llm.gemini, "chat_json", lambda messages, temperature=0.2: response)
 
 
 def test_llm_rewrite_is_fact_checked(agent, monkeypatch):

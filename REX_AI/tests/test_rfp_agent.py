@@ -384,3 +384,54 @@ def test_route_answers_tender_questions(client):
     body = client.post("/route", json={"session_id": "rfp-1", "message": "find training tenders in Saudi Arabia"}).json()
     assert body["agent"] == "rfp_research" and body["result"]["rfp_ids"]
     assert all(db.get_rfp(i)["country"] == "SA" for i in body["result"]["rfp_ids"])
+
+
+# =========================================================================== qualified -> e-mailed to the given address
+class _FakeSMTP:
+    sent: list = []
+
+    def __init__(self, host, port, timeout):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def starttls(self):
+        pass
+
+    def login(self, u, p):
+        pass
+
+    def send_message(self, msg):
+        _FakeSMTP.sent.append(msg)
+
+
+def test_qualified_tender_is_emailed(runs, monkeypatch):
+    from rex_ai.core.schemas import RFPStatusUpdate
+    rfp_id = runs["first"].new_monitoring_saudi[0]
+    monkeypatch.setattr(config, "SMTP_HOST", "smtp.example")
+    monkeypatch.setattr("rex_ai.core.mailer.smtplib.SMTP", _FakeSMTP)
+    _FakeSMTP.sent = []
+    rec = RFPResearchAgent.set_status(rfp_id, RFPStatusUpdate(status="qualified", reviewer="Bids lead",
+                                                              comment="Strong fit", email="bids@academy.example"))
+    assert rec.status.value == "qualified" and len(_FakeSMTP.sent) == 1
+    msg = _FakeSMTP.sent[0]
+    assert msg["To"] == "bids@academy.example" and "Qualified" in msg["Subject"]
+    assert rec.title in msg.get_content() and "Strong fit" in msg.get_content()
+    assert any(a["rfp_id"] == rfp_id and a["priority"] == "qualified" for a in db.list_rfp_alerts())
+    RFPResearchAgent.set_status(rfp_id, RFPStatusUpdate(status="rejected", reviewer="Bids lead",
+                                                        email="bids@academy.example"))
+    assert len(_FakeSMTP.sent) == 1                                       # only "qualified" sends
+
+
+def test_qualified_email_failure_is_reported(runs, monkeypatch):
+    from rex_ai.core.mailer import MailError
+    from rex_ai.core.schemas import RFPStatusUpdate
+    rfp_id = runs["first"].new_monitoring_saudi[0]
+    monkeypatch.setattr(config, "SMTP_HOST", "")
+    with pytest.raises(MailError, match="now qualified, but the e-mail"):
+        RFPResearchAgent.set_status(rfp_id, RFPStatusUpdate(status="qualified", reviewer="QA", email="x@y.example"))
+    assert db.get_rfp(rfp_id)["status"] == "qualified"                    # the decision is saved anyway

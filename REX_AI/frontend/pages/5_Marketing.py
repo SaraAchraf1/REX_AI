@@ -16,11 +16,12 @@ import pandas as pd
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from frontend.ui import api, no_fog  # noqa: E402
+from frontend.ui import api, no_fog, require  # noqa: E402
 from rex_ai import config  # noqa: E402
 
 st.set_page_config(page_title="REX - Marketing", page_icon="📣", layout="wide")
 no_fog()
+require("admin")                                 # administrators only (frontend/ui.py)
 
 STATUS = {"draft": "📝 draft", "pending_approval": "⏳ pending approval", "changes_requested": "✏️ changes requested",
           "approved": "✅ approved", "rejected": "⛔ rejected"}
@@ -396,7 +397,7 @@ if tab_view.open is not False:
                         except ERRORS as exc:
                             st.error(str(exc))
             with st.form("mkt_instructions"):
-                st.markdown("**…or describe the change** (applied by the LLM when OPENAI_API_KEY is set)")
+                st.markdown("**…or describe the change** (applied by Gemini when GEMINI_API_KEY is set - any part can be changed)")
                 reviewer_i = st.text_input("Reviewer name", key="mkt_reviewer_instr")
                 strategy_text = st.text_area("New strategy text (optional)")
                 instructions = st.text_area("Instructions", placeholder="Make the WhatsApp messages shorter\n"

@@ -5,6 +5,10 @@ httpx>=0.27
 streamlit>=1.66        # st.tabs(key=...) to switch tabs from code (Curriculum page)
 pyyaml>=6.0
 pytest>=8.0
+# Shared database (REX_DATABASE_URL): PostgreSQL driver + connection pool. Without a URL, SQLite is used.
+psycopg[binary]>=3.1
+psycopg-pool>=3.2
+pglast>=6.0               # tests only: checks that every SQL statement is valid PostgreSQL
 # Optional: natural-language replies via an LLM (REX works without it)
 openai>=1.30
 python-dotenv>=1.0        # loads .env (OPENAI_API_KEY, REX_RAG_EMBEDDINGS...)
