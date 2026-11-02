@@ -229,9 +229,10 @@ def test_edit_keeps_locked_flag_and_guards_claims(agent, curriculum):
 
 def test_instructions_without_llm_are_reported(agent, curriculum):
     doc = agent.generate(DocumentRequest(doc_type="capstone_brief", curriculum_id=curriculum.curriculum_id))
-    new = agent.edit(doc.document_id, DocumentEdit(reviewer="QA", instructions="make the scenario about banking"))
-    assert new.version == 1 and new.status == ApprovalStatus.changes_requested
-    assert "needs the LLM" in new.metadata["last_edit"]["not_applied"][0]
+    from rex_ai.core.llm_status import LLMUnavailable
+    with pytest.raises(LLMUnavailable, match="Nothing was changed"):
+        agent.edit(doc.document_id, DocumentEdit(reviewer="QA", instructions="make the scenario about banking"))
+    assert agent.get(doc.document_id).version == 1                                  # nothing was changed
 
 
 def test_approval_needs_an_approved_curriculum_then_hands_off_to_marketing(agent):
@@ -284,11 +285,11 @@ def test_email_only_after_approval(agent, monkeypatch):
     with pytest.raises(ValueError, match="Only approved"):
         agent.email(doc.document_id, DocumentEmail(to=["a@b.example"], sender="Author"))
     done = agent.review(doc.document_id, ReviewAction(action="approved", reviewer="Dean"))
-    sent = done.metadata["emails"][0]                                  # pending e-mail sent on approval
-    assert sent["channel"] == "outbox" and sent["to"] == ["coordinator@academy.example"]
-    eml = Path(sent["file"]).read_bytes()
-    assert b"coordinator@academy.example" in eml and b"application/pdf" in eml
-    assert done.emailed_to == [] and done.metadata["pending_email"] == []   # outbox is not "sent"
+    failed = done.metadata["emails"][0]                    # no SMTP: nothing is queued, the approval still stands
+    assert done.status.value == "approved" and failed["channel"] == "failed" and "not configured" in failed["error"]
+    assert done.emailed_to == [] and done.metadata["pending_email"] == ["coordinator@academy.example"]
+    with pytest.raises(RuntimeError, match="SMTP is not configured"):
+        agent.email(doc.document_id, DocumentEmail(to=["a@b.example"], sender="Dean"))
 
 
 def test_email_via_smtp(agent, monkeypatch):
@@ -312,9 +313,10 @@ def test_email_via_smtp(agent, monkeypatch):
 
         def send_message(self, msg):
             sent.append(msg["To"])
+            assert any(p.get_content_type() == "application/pdf" for p in msg.iter_attachments())
 
     monkeypatch.setattr(config, "SMTP_HOST", "smtp.example")
-    monkeypatch.setattr("rex_ai.agents.documents.mailer.smtplib.SMTP", FakeSMTP)
+    monkeypatch.setattr("rex_ai.core.mailer.smtplib.SMTP", FakeSMTP)
     doc = agent.generate(DocumentRequest(doc_type="course_description", course_id="DS-101"))
     agent.review(doc.document_id, ReviewAction(action="approved", reviewer="Dean"))   # catalogue: no curriculum
     done = agent.email(doc.document_id, DocumentEmail(to=["team@academy.example"], sender="Dean"))
@@ -363,9 +365,9 @@ def test_llm_question_bank_usage_note(agent, curriculum, monkeypatch):
 
 
 def test_llm_revision_applies_instructions(agent, curriculum, monkeypatch):
-    monkeypatch.setattr(llm, "enabled", lambda: True)
-    monkeypatch.setattr(llm, "revise", lambda doc_type, sections, instructions, language: [
-        {"key": "scenario", "paragraphs": ["You work for a bank in Cairo."]}])
+    monkeypatch.setattr(llm, "edit_enabled", lambda: True)                  # change requests go to Gemini
+    monkeypatch.setattr(llm, "revise", lambda doc_type, title, sections, instructions, language: {
+        "sections": [{"key": "scenario", "paragraphs": ["You work for a bank in Cairo."]}]})
     doc = agent.generate(DocumentRequest(doc_type="capstone_brief", curriculum_id=curriculum.curriculum_id))
     new = agent.edit(doc.document_id, DocumentEdit(reviewer="QA", instructions="make the scenario about banking"))
     assert new.version == 2 and next(s for s in new.sections if s.key == "scenario").paragraphs == \

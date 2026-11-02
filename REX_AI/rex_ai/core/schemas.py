@@ -81,6 +81,45 @@ class ErrorResponse(BaseModel):
 
 
 # --------------------------------------------------------------------------- #
+# Accounts (owner: Member 3) - rex_ai/core/auth.py
+# --------------------------------------------------------------------------- #
+class UserRole(str, Enum):
+    user = "user"      # REX Course Assistant only; own conversations
+    admin = "admin"    # every agent; shared work with the other administrators
+
+
+class SignupRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=120)
+    email: EmailStr
+    password: str = Field(..., min_length=8, max_length=200)
+    role: UserRole = UserRole.user
+    admin_code: Optional[str] = Field(None, description="Needed for role=admin (except the first administrator)")
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=1, max_length=200)
+
+
+class UserPublic(BaseModel):
+    user_id: str
+    email: str
+    name: str
+    role: UserRole
+    created_at: Optional[str] = None
+    last_login_at: Optional[str] = None
+
+
+class AuthResponse(BaseModel):
+    token: str = Field(..., description="Send as 'Authorization: Bearer <token>'")
+    user: UserPublic
+
+
+class RoleUpdate(BaseModel):
+    role: UserRole
+
+
+# --------------------------------------------------------------------------- #
 # Course knowledge base (owner: Member 1)
 # --------------------------------------------------------------------------- #
 class Instructor(BaseModel):
@@ -327,6 +366,8 @@ class RFPStatusUpdate(BaseModel):
     status: RFPStatus
     reviewer: str = Field(..., min_length=1)
     comment: Optional[str] = None
+    email: Optional[EmailStr] = Field(None, description="When the tender is marked qualified, its details are "
+                                                        "e-mailed here automatically")
 
 
 class RFPAlert(BaseModel):

@@ -29,7 +29,7 @@ from rex_ai.agents.documents.builders import P, build_sections
 from rex_ai.agents.documents.facts import CourseFacts, NotFound, add_module_references, collect
 from rex_ai.agents.documents.mailer import send_document
 from rex_ai.agents.documents.pdf import render_document_pdf
-from rex_ai.core import db
+from rex_ai.core import db, llm_status
 from rex_ai.core.schemas import (AgentName, ApprovalStatus, DocSection, DocumentEdit, DocumentEmail,
                                  DocumentPackRequest, DocumentRecord, DocumentRequest, DocumentType,
                                  DocumentTypeInfo, ReviewAction, SourceRef)
@@ -116,6 +116,8 @@ class DocumentAgent:
             returned = llm.refine(req.doc_type.value, facts.title, sections, facts.snapshot(), context, lang,
                                   req.instructions)
             sections, changed = llm.merge_sections(sections, returned)
+            if not changed and llm_status.reason():
+                facts.notes.append(f"LLM not used: {llm_status.reason()}")
             if changed:
                 generated_by = "llm"
                 if req.doc_type == DocumentType.question_bank:
@@ -250,7 +252,13 @@ class DocumentAgent:
         db.log_event("INFO", "document_review", agent=AGENT,
                      detail=f"{document_id} v{rec.version}: {a.value} by {action.reviewer}: {action.comment or ''}")
         if a == ApprovalStatus.approved and rec.metadata.get("pending_email"):
-            rec = self.email(document_id, DocumentEmail(to=rec.metadata["pending_email"], sender=action.reviewer))
+            try:
+                rec = self.email(document_id, DocumentEmail(to=rec.metadata["pending_email"], sender=action.reviewer))
+            except RuntimeError as exc:                  # approval stands; the failure is shown on the document
+                rec.metadata.setdefault("emails", []).append(
+                    {"sent": False, "channel": "failed", "to": rec.metadata["pending_email"], "error": str(exc),
+                     "by": action.reviewer, "at": _now().isoformat()})
+                rec = self._save(rec, row["request"], "e-mail failed", action.reviewer)
         return rec
 
     def edit(self, document_id: str, edit: DocumentEdit) -> DocumentRecord:
@@ -280,15 +288,19 @@ class DocumentAgent:
         if title != old.title:
             applied.append("title")
         if edit.instructions:
-            returned = llm.revise(old.doc_type.value, sections, edit.instructions, old.language.value) \
-                if llm.enabled() else None
-            merged, changed = llm.merge_sections(sections, returned)
-            if changed:
-                sections = merged
-                applied.append(f"LLM applied to {', '.join(changed)}: {edit.instructions[:200]}")
-            else:
-                not_applied.append(edit.instructions if llm.enabled() else
-                                   f"{edit.instructions} (needs the LLM - edit the sections directly instead)")
+            # the LLM applies the request; if it cannot, nothing is changed and the reviewer is told why
+            if not llm.edit_enabled():
+                raise llm_status.unavailable("document")
+            answer = llm.revise(old.doc_type.value, title, sections, edit.instructions, old.language.value)
+            if answer is None:
+                raise llm_status.unavailable("document")
+            merged, changed, new_title = llm.merge_revision(sections, answer)
+            if not changed:
+                raise llm_status.LLMUnavailable(
+                    "The change was not applied to the document: the LLM returned no usable change. "
+                    "Nothing was changed.")
+            sections, title = merged, new_title or title
+            applied.append(f"LLM applied to {', '.join(changed)}: {edit.instructions[:200]}")
         sections, removed = _guard(sections)
         note = edit.instructions or "; ".join(applied) or "edit"
         db.save_review("document", document_id, ApprovalStatus.changes_requested.value, edit.reviewer, note[:500])
@@ -321,11 +333,10 @@ class DocumentAgent:
         to = [str(x) for x in req.to]
         body = (req.message or f"Please find attached: {rec.title} (version {rec.version}).") + \
             "\n\n-- Sent by REX AI on behalf of the academy"
-        result = send_document(to, rec.title, body, self.pdf(document_id))
+        result = send_document(to, rec.title, body, self.pdf(document_id))   # raises if not really sent
         result.update(by=req.sender, at=_now().isoformat())
         rec.metadata.setdefault("emails", []).append(result)
-        if result["sent"]:
-            rec.emailed_to = list(dict.fromkeys(rec.emailed_to + to))
+        rec.emailed_to = list(dict.fromkeys(rec.emailed_to + to))
         rec.metadata["pending_email"] = []
         db.save_document(rec.model_dump(mode="json"), row["request"], change_note=f"e-mail ({result['channel']})",
                          changed_by=req.sender)

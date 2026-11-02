@@ -34,7 +34,7 @@ from rex_ai.agents.marketing.facts import NotFound, collect
 from rex_ai.agents.marketing.pdf import render_campaign_pdf
 from rex_ai.agents.marketing.publish import send_email, write_package
 from rex_ai.agents.marketing.writer import CopyWriter
-from rex_ai.core import db
+from rex_ai.core import db, llm_status
 from rex_ai.core.schemas import (AgentName, ApprovalStatus, Campaign, CampaignEdit, CampaignPublish, CampaignRequest,
                                  ChannelInfo, ContentVariant, ReviewAction, SourceRef)
 
@@ -123,6 +123,8 @@ class MarketingAgent:
             persona = {k: audience[k] for k in ("persona", "pains", "motivations", "tone", "text")}
             returned = llm.refine(variants, snapshot, persona, summary, context, lang, req.instructions)
             variants, changed, rejected = llm.merge(variants, returned, allowed, lang)
+            if not changed and llm_status.reason():
+                facts.notes.append(f"LLM not used: {llm_status.reason()}")
             if changed:
                 generated_by = "llm" if len(changed) == len(variants) else "llm+rules"
         now = _now()
@@ -280,15 +282,27 @@ class MarketingAgent:
         if strategy_text != old.strategy:
             applied.append("strategy")
         if edit.instructions:
-            returned = llm.revise(variants, old.course_facts_used, edit.instructions, lang) if llm.enabled() else None
-            merged, changed, rejected = llm.merge(variants, returned, allowed, lang)
-            if changed:
-                variants = merged
-                applied.append(f"LLM applied to {', '.join(changed)}: {edit.instructions[:200]}")
-            not_applied += rejected
+            # the LLM applies the request; if it cannot, nothing is changed and the reviewer is told why
+            if not llm.edit_enabled():
+                raise llm_status.unavailable("campaign")
+            answer = llm.revise(variants, old.course_facts_used, strategy_text, edit.instructions, lang)
+            if answer is None:
+                raise llm_status.unavailable("campaign")
+            # numbers the reviewer wrote in the request (a new fee, a discount) count as approved
+            merged, changed, rejected = llm.merge(variants, answer.get("variants") or [],
+                                                  checks.allowed_numbers(old.course_facts_used, [edit.instructions]),
+                                                  lang)
+            new_strategy = answer.get("strategy")
+            if isinstance(new_strategy, str) and new_strategy.strip() and new_strategy.strip() != strategy_text:
+                strategy_text = new_strategy.strip()
+                changed.append("strategy")
             if not changed:
-                not_applied.append(edit.instructions if llm.enabled() else
-                                   f"{edit.instructions} (needs the LLM - edit the variants directly instead)")
+                why = "; ".join(rejected) or "the LLM returned no changed variant"
+                raise llm_status.LLMUnavailable(f"The change was not applied to the campaign: {why}. "
+                                                "Nothing was changed.")
+            variants = merged
+            applied.append(f"LLM applied to {', '.join(changed)}: {edit.instructions[:200]}")
+            not_applied += rejected
         variants.sort(key=lambda v: ([c.value for c in old.channels].index(v.channel.value)
                                      if v.channel in old.channels else 99, v.variant_no))
         note = edit.instructions or "; ".join(applied) or "edit"

@@ -1,5 +1,6 @@
 """Optional LLM calls for the Curriculum Agent. Every function returns None when no key is set or the call fails,
-and the agent keeps its rule-based curriculum - the workflow never depends on the LLM. Whatever the LLM returns
+and the agent keeps its rule-based curriculum - the workflow never depends on the LLM. refine() (generation) uses
+OpenAI; revise() (a reviewer's change request) uses Gemini. Whatever the LLM returns
 goes through generator.finalize() (hours, weights, requested outcomes, accreditation-claim guard)."""
 from __future__ import annotations
 
@@ -8,6 +9,7 @@ import logging
 from typing import Optional
 
 from rex_ai import config
+from rex_ai.core import gemini, llm_status
 
 log = logging.getLogger("rex.curriculum.llm")
 
@@ -26,7 +28,13 @@ def enabled() -> bool:
     return config.USE_LLM
 
 
+def edit_enabled() -> bool:
+    """Change requests are applied by Gemini."""
+    return gemini.enabled()
+
+
 def _chat(messages: list[dict]) -> Optional[dict]:
+    llm_status.clear()
     if not config.USE_LLM:
         return None
     try:
@@ -37,6 +45,7 @@ def _chat(messages: list[dict]) -> Optional[dict]:
         return json.loads(resp.choices[0].message.content)
     except Exception as exc:
         log.warning("Curriculum LLM call failed, using the rule-based curriculum: %s", exc)
+        llm_status.record(exc)
         return None
 
 
@@ -46,7 +55,13 @@ def _valid(data: Optional[dict]) -> Optional[dict]:
     mods = data.get("modules")
     if not isinstance(mods, list) or not mods or not all(isinstance(m, dict) and m.get("title") for m in mods):
         return None
-    return {k: data[k] for k in CURRICULUM_KEYS}
+    out = {k: data[k] for k in CURRICULUM_KEYS}
+    try:                                           # optional: a new course total ("set hours to 48")
+        if data.get("training_hours") is not None and float(data["training_hours"]) > 0:
+            out["training_hours"] = float(data["training_hours"])
+    except (TypeError, ValueError):
+        pass
+    return out
 
 
 def refine(request: dict, draft: dict, context: str, language: str) -> Optional[dict]:
@@ -68,11 +83,15 @@ def refine(request: dict, draft: dict, context: str, language: str) -> Optional[
 def revise(curriculum: dict, instructions: str, language: str) -> Optional[dict]:
     """Apply a reviewer's free-text modification request."""
     lang = "Arabic" if language == "ar" else "English"
-    data = _chat([
+    data = gemini.chat_json([
         {"role": "system", "content": SYSTEM},
         {"role": "user", "content":
             f"CURRICULUM:\n{json.dumps({k: curriculum.get(k) for k in CURRICULUM_KEYS}, ensure_ascii=False)}\n\n"
             f"TRAINING HOURS: {curriculum.get('training_hours')}\n\nREVIEWER REQUEST:\n{instructions}\n\n"
-            f"Apply the reviewer's request and change nothing else. Write in {lang}. "
-            f"Return JSON with keys: {', '.join(CURRICULUM_KEYS)}."}])
+            f"Apply the reviewer's request - any part may change: objectives, prerequisites, outcomes, modules (add, "
+            f"remove, rename, reorder, re-time), topics, exercises, assessments, capstone, total hours - and change "
+            f"nothing else. Write in {lang}. modules = [{{title, topics, "
+            f"hours, exercises}}] with the capstone module last; assessments = [{{name, type, weight_pct}}] totalling "
+            f"100. Return JSON with keys: {', '.join(CURRICULUM_KEYS)}, training_hours (the course total - change it "
+            f"only if the reviewer asks)."}])
     return _valid(data)

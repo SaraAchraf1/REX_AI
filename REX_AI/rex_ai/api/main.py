@@ -22,12 +22,15 @@ from rex_ai.agents.rex.text_utils import contains_any
 from rex_ai.agents.rfp import sources as rfp_sources
 from rex_ai.agents.rfp.agent import RFPResearchAgent, row_to_record
 from rex_ai.agents.rfp.taxonomy import COUNTRY_PLACES
-from rex_ai.core import data_sync, db
+from rex_ai.core import auth, data_sync, db, filestore
+from rex_ai.core.llm_status import LLMUnavailable
+from rex_ai.core.mailer import MailError
 from rex_ai.core.schemas import (AgentName, ApprovalStatus, Campaign, CampaignEdit, CampaignPublish, CampaignRequest,
                                  Channel, ChannelInfo, ChatRequest, ChatResponse, Country, Course, Curriculum,
                                  CurriculumImport, CurriculumRequest, CurriculumResearch, CurriculumRevision,
                                  DocumentEdit, DocumentEmail, DocumentPackRequest, DocumentRecord, DocumentRequest,
-                                 DocumentType, DocumentTypeInfo, ErrorResponse, FrameworkInfo, GapReport, GapReportRequest, Lead, LeadCreate, RAGHit,
+                                 DocumentType, DocumentTypeInfo, ErrorResponse, FrameworkInfo, AuthResponse, LoginRequest,
+                                 RoleUpdate, SignupRequest, UserPublic, GapReport, GapReportRequest, Lead, LeadCreate, RAGHit,
                                  RAGSearchRequest, RAGSearchResponse, ReviewAction, RFPAlert, RFPAskRequest,
                                  RFPAskResponse, RFPCategory, RFPRecord, RFPRunRequest, RFPRunResult, RFPStatus,
                                  RFPStatusUpdate, RouteRequest, RouteResponse, SkillLevel)
@@ -39,6 +42,7 @@ log = logging.getLogger("rex.api")
 async def lifespan(app: FastAPI):
     rex()                                # merges/indexes new files in data/catalog/ and data/documents/
     yield
+    db.close_pools()                     # shared database: give the connections back on shutdown
 
 
 app = FastAPI(title="REX AI API", version="0.1.0 (Sprint 1)", lifespan=lifespan,
@@ -66,21 +70,142 @@ async def unhandled_handler(request: Request, exc: Exception):
         code="internal_error", message="Something went wrong. Please try again.").model_dump())
 
 
+# ---------------------------------------------------------------- Accounts and access control
+PUBLIC = {"/health", "/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json", "/auth/signup", "/auth/login"}
+PUBLIC_PREFIXES = ("/courses",)                       # the course catalogue is public information
+USER_PATHS = {"/chat", "/leads", "/auth/me", "/auth/logout"}
+USER_PREFIXES = ("/chat/",)                           # own conversations
+# everything else (RFP, curriculum, documents, campaigns, data, RAG, orchestrator, users) = administrators only
+
+
+def _bearer(request: Request) -> str | None:
+    value = request.headers.get("authorization", "")
+    return value[7:].strip() if value.lower().startswith("bearer ") else None
+
+
+@app.middleware("http")
+async def access_control(request: Request, call_next):
+    """Who may call what (rex_ai/core/auth.py). With REX_API_AUTH=0 nothing is refused, but a token still
+    identifies the account (conversations stay per account)."""
+    from starlette.concurrency import run_in_threadpool
+    path = request.url.path.rstrip("/") or "/"
+    token = _bearer(request)
+    user = await run_in_threadpool(auth.user_for_token, token) if token else None
+    request.state.user = user
+    if not config.API_AUTH or path in PUBLIC or path.startswith(PUBLIC_PREFIXES):
+        return await call_next(request)
+    if user is None:
+        return JSONResponse(status_code=401, content=ErrorResponse(
+            code="not_authenticated", message="Log in first (Authorization: Bearer <token> from POST /auth/login)"
+        ).model_dump())
+    if user["role"] != "admin" and not (path in USER_PATHS or path.startswith(USER_PREFIXES)):
+        return JSONResponse(status_code=403, content=ErrorResponse(
+            code="forbidden", message="Only administrators can use this agent").model_dump())
+    return await call_next(request)
+
+
+def _user(request: Request) -> dict | None:
+    return getattr(request.state, "user", None)
+
+
+@app.post("/auth/signup", response_model=AuthResponse, status_code=201, tags=["Accounts"],
+          responses={400: {"model": ErrorResponse}})
+def auth_signup(req: SignupRequest):
+    """Create an account and log in. role=admin needs admin_code (REX_ADMIN_SIGNUP_CODE), except for the first
+    administrator."""
+    rex()
+    try:
+        auth.signup(req.name, req.email, req.password, req.role.value, req.admin_code)
+        user, token = auth.login(req.email, req.password)
+    except auth.AuthError as exc:
+        return _error(400, "signup_failed", str(exc))
+    return AuthResponse(token=token, user=UserPublic(**user))
+
+
+@app.post("/auth/login", response_model=AuthResponse, tags=["Accounts"], responses={401: {"model": ErrorResponse}})
+def auth_login(req: LoginRequest):
+    rex()
+    try:
+        user, token = auth.login(req.email, req.password)
+    except auth.AuthError as exc:
+        return _error(401, "login_failed", str(exc))
+    return AuthResponse(token=token, user=UserPublic(**user))
+
+
+@app.get("/auth/me", response_model=UserPublic, tags=["Accounts"], responses={401: {"model": ErrorResponse}})
+def auth_me(request: Request):
+    user = _user(request)
+    if not user:
+        return _error(401, "not_authenticated", "Log in first")
+    return UserPublic(**user)
+
+
+@app.post("/auth/logout", tags=["Accounts"])
+def auth_logout(request: Request) -> dict:
+    auth.logout(_bearer(request))
+    return {"status": "logged_out"}
+
+
+@app.get("/auth/users", response_model=list[UserPublic], tags=["Accounts"])
+def auth_users() -> list[UserPublic]:
+    """All accounts (administrators only)."""
+    return [UserPublic(**u) for u in db.list_users()]
+
+
+@app.patch("/auth/users/{user_id}", response_model=UserPublic, tags=["Accounts"],
+           responses={404: {"model": ErrorResponse}, 400: {"model": ErrorResponse}})
+def auth_set_role(user_id: str, update: RoleUpdate):
+    """Make an account a user or an administrator (administrators only; the last administrator is kept)."""
+    try:
+        return UserPublic(**auth.set_role(user_id, update.role.value))
+    except LookupError as exc:
+        return _error(404, "not_found", str(exc))
+    except auth.AuthError as exc:
+        return _error(400, "invalid_role", str(exc))
+
+
 @app.get("/health")
 def health() -> dict:
     retriever = rex().retriever
     kb = get_kb()
     return {"status": "ok", "courses": len(kb.courses), "data_status": kb.meta.get("status"),
-            "llm_enabled": config.USE_LLM, "retriever": type(retriever).__name__,
-            "embedder": getattr(retriever, "backend", "tfidf")}
+            "llm_enabled": config.USE_LLM, "gemini_edits_enabled": config.USE_GEMINI, "retriever": type(retriever).__name__,
+            "embedder": getattr(retriever, "backend", "tfidf"), "database": db.describe()}
 
 
 # ---------------------------------------------------------------- REX (Agent 1)
-@app.post("/chat", response_model=ChatResponse, tags=["REX Assistant"])
-def chat(req: ChatRequest) -> ChatResponse:
-    resp = rex().handle(req)
+@app.post("/chat", response_model=ChatResponse, tags=["REX Assistant"], responses={403: {"model": ErrorResponse}})
+def chat(req: ChatRequest, request: Request):
+    """Send a message. With a login, the conversation is stored under that account; another account's
+    conversation id is refused."""
+    assistant = rex()
+    user = _user(request)
+    if user and not db.claim_session(req.session_id, user["user_id"]):
+        return _error(403, "forbidden", "This conversation belongs to another account")
+    resp = assistant.handle(req)
     db.log_event("INFO", "chat", agent=AgentName.rex_assistant.value, detail=f"{req.session_id}:{resp.intent}")
     return resp
+
+
+@app.get("/chat/sessions", tags=["REX Assistant"])
+def chat_sessions(request: Request) -> list[dict]:
+    """The logged-in account's conversations, newest first (title = first message)."""
+    rex()
+    user = _user(request)
+    return db.list_sessions(user["user_id"]) if user else []
+
+
+@app.get("/chat/{session_id}/history", tags=["REX Assistant"])
+def chat_history(session_id: str, request: Request) -> dict:
+    """A stored conversation (messages oldest first), so the chat can be reopened on any server. Only the
+    account that owns it gets the messages."""
+    rex()
+    user = _user(request)
+    session = db.load_session(session_id)
+    if session and (user or config.API_AUTH) and session.get("user_id") != (user or {}).get("user_id"):
+        session = None                                  # someone else's: answer as if it did not exist
+    return {"session_id": session_id, "found": session is not None, "language": (session or {}).get("language"),
+            "stage": (session or {}).get("stage"), "messages": db.list_messages(session_id) if session else []}
 
 
 @app.get("/courses", response_model=list[Course], tags=["REX Assistant"])
@@ -103,9 +228,10 @@ def get_course(course_id: str) -> Course:
 
 
 @app.post("/leads", response_model=Lead, status_code=201, tags=["REX Assistant"])
-def create_lead(lead: LeadCreate) -> Lead:
+def create_lead(lead: LeadCreate, request: Request) -> Lead:
     rex()  # make sure the DB is initialised
-    saved = db.save_lead(lead.model_dump(mode="json"))
+    user = _user(request)
+    saved = db.save_lead({**lead.model_dump(mode="json"), "user_id": user["user_id"] if user else None})
     db.log_event("INFO", "lead_saved", agent=AgentName.rex_assistant.value, detail=saved["lead_id"])
     return Lead(**saved)
 
@@ -242,6 +368,7 @@ def rfp_upload(file: UploadFile = File(...)) -> dict:
     folder.mkdir(parents=True, exist_ok=True)
     path = data_sync._unique_path(folder, name)
     path.write_bytes(file.file.read())
+    filestore.push()                     # shared database: other servers get the file too
     db.log_event("INFO", "rfp_upload", agent=AgentName.rfp_research.value, detail=f"{path.name}:{kind}")
     return {"file": path.name, "kind": kind, "status": "saved - run POST /rfp/run to process it"}
 
@@ -256,15 +383,18 @@ def rfp_get(rfp_id: str) -> RFPRecord:
 
 
 @app.patch("/rfp/{rfp_id}/status", response_model=RFPRecord, tags=["RFP Research"],
-           responses={404: {"model": ErrorResponse}})
-def rfp_set_status(rfp_id: str, update: RFPStatusUpdate) -> RFPRecord:
-    """Reviewer decision, e.g. flagged_review -> qualified (bid) or rejected (no bid)."""
+           responses={404: {"model": ErrorResponse}, 502: {"model": ErrorResponse}})
+def rfp_set_status(rfp_id: str, update: RFPStatusUpdate):
+    """Reviewer decision, e.g. flagged_review -> qualified (bid) or rejected (no bid). Marked qualified with an
+    `email`, the tender is e-mailed there at once (502 email_failed if not sent - the status is still saved)."""
     rex()
-    if not db.update_rfp_status(rfp_id, update.status.value):
+    try:
+        rec = RFPResearchAgent.set_status(rfp_id, update)
+    except MailError as exc:
+        return _error(502, "email_failed", str(exc))
+    if rec is None:
         raise HTTPException(status_code=404, detail=f"RFP {rfp_id} not found")
-    db.log_event("INFO", "rfp_review", agent=AgentName.rfp_research.value,
-                 detail=f"{rfp_id}:{update.status.value} by {update.reviewer}: {update.comment or ''}")
-    return rfp_get(rfp_id)
+    return rec
 
 
 # ------------------------------------------------------------ Curriculum & Accreditation Alignment (Agent 3)
@@ -383,6 +513,8 @@ def curriculum_revise(curriculum_id: str, rev: CurriculumRevision):
         return curriculum_agent().revise(curriculum_id, rev)
     except NotFound as exc:
         return _error(404, "not_found", str(exc))
+    except LLMUnavailable as exc:                 # the LLM could not apply it: nothing changed
+        return _error(503, "llm_unavailable", str(exc))
     except ValueError as exc:
         return _error(400, "invalid_revision", str(exc))
 
@@ -476,6 +608,8 @@ def document_edit(document_id: str, edit: DocumentEdit):
         return document_agent().edit(document_id, edit)
     except NotFound as exc:
         return _error(404, "not_found", str(exc))
+    except LLMUnavailable as exc:                 # the LLM could not apply it: nothing changed
+        return _error(503, "llm_unavailable", str(exc))
 
 
 @app.post("/documents/{document_id}/review", response_model=DocumentRecord, tags=["Documents"],
@@ -494,7 +628,7 @@ def document_review(document_id: str, action: ReviewAction):
 @app.post("/documents/{document_id}/email", response_model=DocumentRecord, tags=["Documents"],
           responses={404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}, 502: {"model": ErrorResponse}})
 def document_email(document_id: str, req: DocumentEmail):
-    """E-mail the PDF of an APPROVED document (SMTP when configured, else saved to outputs/documents/outbox/)."""
+    """E-mail the PDF of an APPROVED document over SMTP (502 email_failed with the reason if it is not sent)."""
     try:
         return document_agent().email(document_id, req)
     except NotFound as exc:
@@ -585,6 +719,8 @@ def campaign_edit(campaign_id: str, edit: CampaignEdit):
         return marketing_agent().edit(campaign_id, edit)
     except NotFound as exc:
         return _error(404, "not_found", str(exc))
+    except LLMUnavailable as exc:                 # the LLM could not apply it: nothing changed
+        return _error(503, "llm_unavailable", str(exc))
 
 
 @app.post("/campaigns/{campaign_id}/review", response_model=Campaign, tags=["Marketing"],

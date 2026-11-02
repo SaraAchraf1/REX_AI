@@ -4,6 +4,7 @@ Business rule from the brief: Egypt opportunities are flagged for review IMMEDIA
 each); Saudi opportunities join the monitored pipeline (one normal-priority digest per run).
 Every alert is stored in rfp_alerts (dashboard + GET /rfp/alerts) and written to the log. It is also POSTed
 to REX_RFP_WEBHOOK_URL (Slack / Teams / n8n) and e-mailed to REX_RFP_ALERT_EMAILS when those are configured.
+A tender a reviewer marks qualified is e-mailed to the address given with the decision (send_qualified).
 """
 from __future__ import annotations
 
@@ -14,7 +15,7 @@ from datetime import datetime, timezone
 from email.message import EmailMessage
 
 from rex_ai import config
-from rex_ai.core import db
+from rex_ai.core import db, mailer
 
 log = logging.getLogger("rex.rfp.alerts")
 
@@ -90,3 +91,30 @@ def notify(new_records: list[dict]) -> list[dict]:
     for a in alerts:
         db.save_rfp_alert(a)
     return alerts
+
+
+def send_qualified(r: dict, to: str, reviewer: str, comment: str = "") -> dict:
+    """E-mail a tender the reviewer just marked qualified (raises mailer.MailError if it is not sent)."""
+    lines = [f"{reviewer} marked this tender as QUALIFIED - prepare a bid.", "",
+             f"Title: {r['title']}", f"Issuing organisation: {r['issuing_organization']}",
+             f"Country: {COUNTRY_NAMES[r['country']]}", f"Category: {r['training_category']}",
+             f"Deadline: {r.get('deadline') or 'not stated'}", f"Published: {r.get('publication_date') or '-'}",
+             f"Academy fit: {r['qualification']}"]
+    if r.get("matched_course_ids"):
+        lines.append(f"Matching courses: {', '.join(r['matched_course_ids'])}")
+    if r.get("submission_link"):
+        lines.append(f"Submission link: {r['submission_link']}")
+    if comment:
+        lines += ["", f"Reviewer comment: {comment}"]
+    for label, key in (("Summary", "summary"), ("Eligibility", "eligibility_requirements"),
+                       ("Academy fit notes", "qualification_notes")):
+        if r.get(key):
+            lines += ["", f"{label}:", r[key]]
+    if r.get("available_documents"):
+        lines += ["", "Documents: " + "; ".join(r["available_documents"])]
+    lines += ["", f"Reference: {r['rfp_id']}", "-- Sent by REX AI (RFP Research Agent)"]
+    result = mailer.send([to], f"[REX RFP] Qualified: {r['title'][:120]}", "\n".join(lines))
+    db.save_rfp_alert({"alert_id": "ALR-" + uuid.uuid4().hex[:10], "rfp_id": r["rfp_id"], "country": r["country"],
+                       "priority": "qualified", "message": f"Qualified by {reviewer} - e-mailed to {to}: {_line(r)}",
+                       "channels": ["email"], "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds")})
+    return result

@@ -1,7 +1,8 @@
 # REX AI — Data Structure & Integration Interfaces (Sprint 1, S1-07)
 
 This is the contract all three members build against. The source of truth in code is
-`rex_ai/core/schemas.py` (Pydantic models) and `rex_ai/core/schema.sql` (database). The FastAPI
+`rex_ai/core/schemas.py` (Pydantic models) and `rex_ai/core/schema.sql` (database: PostgreSQL when
+`REX_DATABASE_URL` is set, shared by every server; otherwise a local SQLite file). The FastAPI
 docs at `http://localhost:8000/docs` are generated from the same models.
 
 **Change rule:** a field is added, renamed or removed only through a Pull Request reviewed by every
@@ -38,10 +39,20 @@ owner whose agent uses that model (see the Owner column).
 
 ## 3. Endpoints
 
+Access (rex_ai/api/main.py `access_control`): send `Authorization: Bearer <token>` from `/auth/login`. Public:
+`/health`, `/courses`, `/auth/signup`, `/auth/login`. Users: `/chat`, `/chat/*` (own conversations), `/leads`,
+`/auth/me`, `/auth/logout`. Everything else: administrators. 401 = not logged in, 403 = role not allowed.
+
 | Method + path | Agent | Request → Response | Status |
 | --- | --- | --- | --- |
+| `POST /auth/signup` | Accounts | `SignupRequest {name, email, password, role, admin_code}` → `AuthResponse {token, user}` (201) | Built |
+| `POST /auth/login` | Accounts | `LoginRequest` → `AuthResponse` (401 wrong e-mail or password) | Built |
+| `GET /auth/me`, `POST /auth/logout` | Accounts | token → `UserPublic` / logged out | Built |
+| `GET /auth/users`, `PATCH /auth/users/{id}` | Accounts (admin) | — → `UserPublic[]`; `RoleUpdate {role}` → `UserPublic` | Built |
+| `GET /chat/sessions` | REX Assistant | — → the logged-in account's conversations | Built |
 | `GET /health` | Platform | — → `{status, courses, data_status, llm_enabled}` | Built |
 | `POST /chat` | REX Assistant | `ChatRequest` → `ChatResponse` | Built |
+| `GET /chat/{session_id}/history` | REX Assistant | — → `{session_id, found, language, stage, messages}` (reopen a conversation on any server) | Built |
 | `GET /courses?department=&skill_level=` | REX Assistant | — → `Course[]` | Built |
 | `GET /courses/{course_id}` | REX Assistant | — → `Course` (404 if unknown) | Built |
 | `POST /leads` | REX Assistant | `LeadCreate` → `Lead` (201) | Built |

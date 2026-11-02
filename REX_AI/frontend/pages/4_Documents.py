@@ -16,16 +16,17 @@ import pandas as pd
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from frontend.ui import api, no_fog  # noqa: E402
+from frontend.ui import api, no_fog, require  # noqa: E402
 from rex_ai import config  # noqa: E402
 
 st.set_page_config(page_title="REX - Documents", page_icon="📄", layout="wide")
 no_fog()
+require("admin")                                 # administrators only (frontend/ui.py)
 
 STATUS = {"draft": "📝 draft", "pending_approval": "⏳ pending approval", "changes_requested": "✏️ changes requested",
           "approved": "✅ approved", "rejected": "⛔ rejected"}
 LIBRARY_TAB, VIEW_TAB = "Documents", "Selected document"
-ERRORS = (LookupError, ValueError, httpx.HTTPError)
+ERRORS = (LookupError, ValueError, RuntimeError, httpx.HTTPError)   # RuntimeError: e-mail not sent
 
 
 # ------------------------------------------------------------------ backend
@@ -424,7 +425,7 @@ if tab_view.open is not False:
                         except ERRORS as exc:
                             st.error(str(exc))
             with st.form("doc_instructions"):
-                st.markdown("**…or describe the change** (applied by the LLM when OPENAI_API_KEY is set)")
+                st.markdown("**…or describe the change** (applied by Gemini when GEMINI_API_KEY is set - any part can be changed)")
                 reviewer_i = st.text_input("Reviewer name", key="doc_reviewer_instr")
                 title = st.text_input("New title (optional)")
                 instructions = st.text_area("Instructions", placeholder="Use banking examples in the scenario\n"
@@ -485,15 +486,13 @@ if tab_view.open is not False:
                                 out = email(did, recipients, sender, message)
                                 changed()
                                 last = out["metadata"]["emails"][-1]
-                                notice("success" if last["sent"] else "info",
-                                       f"Sent to {', '.join(last['to'])}" if last["sent"] else
-                                       f"SMTP is not configured - the e-mail was saved to {last.get('file')}",
-                                       "Review & e-mail")
+                                notice("success", f"Sent to {', '.join(last['to'])}", "Review & e-mail")
                                 st.rerun()
                             except ERRORS as exc:
                                 st.error(str(exc))
             for e in meta.get("emails") or []:
-                st.caption(f"✉️ {e['at'][:16].replace('T', ' ')} · {e['by']} → {', '.join(e['to'])} via {e['channel']}")
+                st.caption(f"✉️ {e['at'][:16].replace('T', ' ')} · {e['by']} → {', '.join(e['to'])} via {e['channel']}"
+                           + (f" - {e['error']}" if e.get("error") else ""))
             if meta.get("pending_email"):
                 st.caption("Will be e-mailed on approval to: " + ", ".join(meta["pending_email"]))
             if doc.get("reviewer_comments"):
