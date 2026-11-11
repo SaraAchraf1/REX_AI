@@ -11,6 +11,8 @@ psycopg-pool>=3.2
 pglast>=6.0               # tests only: checks that every SQL statement is valid PostgreSQL
 # Optional: natural-language replies via an LLM (REX works without it)
 openai>=1.30
+# MCP tool server: every external service (LLMs, embeddings, e-mail, webhooks, web) is an MCP tool
+mcp>=2.3
 python-dotenv>=1.0        # loads .env (OPENAI_API_KEY, REX_RAG_EMBEDDINGS...)
 # Shared RAG pipeline (rex_ai/core/rag.py)
 chromadb>=1.0

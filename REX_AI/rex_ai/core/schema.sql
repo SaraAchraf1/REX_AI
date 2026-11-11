@@ -179,7 +179,9 @@ CREATE TABLE IF NOT EXISTS rfps (
     relevance_score          REAL NOT NULL DEFAULT 0,
     matched_course_ids       TEXT,                  -- JSON list
     priority                 TEXT NOT NULL DEFAULT 'normal',
-    first_seen               TEXT
+    first_seen               TEXT,
+    emailed_at               TEXT,                  -- last time an e-mail about this tender was really sent
+    emailed_to               TEXT                   -- JSON list: every address it was sent to
 );
 CREATE INDEX IF NOT EXISTS idx_rfps_country_status ON rfps(country, status);
 CREATE INDEX IF NOT EXISTS idx_rfps_deadline ON rfps(deadline);
@@ -367,4 +369,16 @@ CREATE TABLE IF NOT EXISTS app_logs (
     event      TEXT NOT NULL,
     detail     TEXT,
     created_at TEXT NOT NULL
+);
+
+-- Tasks given to the orchestrator by an administrator; state = steps, plan, pending approval, artifacts (JSON)
+CREATE TABLE IF NOT EXISTS orchestrator_tasks (
+    task_id    TEXT PRIMARY KEY,
+    status     TEXT NOT NULL CHECK (status IN ('running','needs_input','awaiting_approval','completed','failed','cancelled')),
+    message    TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    error      TEXT,
+    state      TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
 );

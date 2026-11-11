@@ -63,6 +63,7 @@ class AgentName(str, Enum):
     curriculum = "curriculum"
     document = "document"
     marketing = "marketing"
+    orchestrator = "orchestrator"
 
 
 class SourceRef(BaseModel):
@@ -326,6 +327,8 @@ class RFPRecord(BaseModel):
     matched_course_ids: list[str] = Field(default_factory=list, description="Academy courses that could deliver it")
     priority: str = Field("normal", examples=["high", "normal"], description="high = Egypt, alert immediately")
     first_seen: Optional[datetime] = None
+    emailed_at: Optional[datetime] = Field(None, description="Last time an e-mail about this tender was sent")
+    emailed_to: list[str] = Field(default_factory=list, description="Every address it was e-mailed to")
 
 
 class RFPRunRequest(BaseModel):
@@ -849,6 +852,21 @@ class RouteResponse(BaseModel):
     intent: str
     confidence: float = Field(..., ge=0, le=1)
     result: dict[str, Any]
+
+
+class TaskRequest(BaseModel):
+    """A task for the orchestrator, in plain language: "Create a curriculum for ... and a campaign for it"."""
+    message: str = Field(..., min_length=2, max_length=4000)
+
+
+class TaskAnswers(BaseModel):
+    """The administrator's answers, in the order of the task's questions."""
+    answers: list[str] = Field(..., min_length=1)
+
+
+class TaskDecision(BaseModel):
+    """Confirm or decline the action a task paused on (approve, e-mail, publish...)."""
+    approve: bool
 
 
 class HandoffEvent(BaseModel):

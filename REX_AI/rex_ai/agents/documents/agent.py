@@ -347,18 +347,13 @@ class DocumentAgent:
     # ================================================================== handoffs (Curriculum -> Document)
     def pending_handoffs(self) -> list[dict]:
         """Approved curricula handed to this agent, with the documents already made from them."""
-        out, seen = [], set()
+        events = {}                                   # newest handoff per curriculum
         for ev in db.list_handoffs_to(AGENT):
-            cid = ev["payload_id"]
-            if ev["payload_type"] != "curriculum" or cid in seen:
-                continue
-            seen.add(cid)
-            row = db.get_curriculum(cid)
-            if not row:
-                continue
-            docs = db.list_documents(curriculum_id=cid)
-            out.append({"event_id": ev["event_id"], "curriculum_id": cid, "course_title": row["course_title"],
-                        "curriculum_status": row["content"].get("status"), "version": row["content"].get("version"),
-                        "handed_over_at": ev["created_at"], "documents": len(docs),
-                        "doc_types": sorted({d["doc_type"] for d in docs})})
-        return out
+            if ev["payload_type"] == "curriculum":
+                events.setdefault(ev["payload_id"], ev)
+        rows = db.get_curricula(events)               # a fixed number of queries, however many handoffs
+        types = db.document_types_by_curriculum(rows)
+        return [{"event_id": ev["event_id"], "curriculum_id": cid, "course_title": rows[cid]["course_title"],
+                 "curriculum_status": rows[cid]["content"].get("status"), "version": rows[cid]["content"].get("version"),
+                 "handed_over_at": ev["created_at"], "documents": len(types[cid]), "doc_types": sorted(set(types[cid]))}
+                for cid, ev in events.items() if cid in rows]

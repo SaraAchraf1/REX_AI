@@ -18,7 +18,7 @@ import pandas as pd
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from frontend.ui import api, no_fog, require  # noqa: E402
+from frontend.ui import api, no_fog, prefetch, require  # noqa: E402
 from rex_ai import config  # noqa: E402
 
 st.set_page_config(page_title="REX - Curriculum", page_icon="📚", layout="wide")
@@ -181,6 +181,8 @@ def notice(kind: str, text: str, subtab: str | None = None) -> None:
 
 
 # ------------------------------------------------------------------ sidebar: discovery questions
+prefetch((frameworks,), (courses,), (list_curricula, (("department", ""), ("skill_level", ""), ("country", ""),
+                                                      ("status", ""), ("max_hours", 0), ("q", ""))))
 fw_names = {f["framework_id"]: f"{f['short_name']} ({f['country']})" for f in frameworks()}
 catalogue = courses()
 

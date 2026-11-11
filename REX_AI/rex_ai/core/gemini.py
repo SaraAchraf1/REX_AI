@@ -1,6 +1,6 @@
 """Gemini client for change requests in the Curriculum, Document and Marketing agents (owner: Member 3).
 
-Gemini is called through its OpenAI-compatible endpoint, so the openai package is the only dependency. Returns the
+Gemini is called through the MCP tool server (tool llm_chat, provider gemini - its OpenAI-compatible endpoint). Returns the
 parsed JSON answer, or None when Gemini is not configured or the call fails (the reason is kept in llm_status).
 """
 from __future__ import annotations
@@ -25,11 +25,8 @@ def chat_json(messages: list[dict], temperature: float = 0.2) -> Optional[dict]:
     if not config.USE_GEMINI:
         return None
     try:
-        from openai import OpenAI
-        client = OpenAI(api_key=config.GEMINI_API_KEY, base_url=config.GEMINI_BASE_URL)
-        resp = client.chat.completions.create(model=config.GEMINI_MODEL, messages=messages, temperature=temperature,
-                                              response_format={"type": "json_object"})
-        text = (resp.choices[0].message.content or "").strip()
+        from rex_ai.mcp import client as tools
+        text = tools.chat("gemini", messages, temperature=temperature, json_mode=True).strip()
         text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text)        # Gemini sometimes fences its JSON
         return json.loads(text)
     except Exception as exc:

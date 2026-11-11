@@ -124,9 +124,12 @@ rex_ai/
   agents/curriculum/        Curriculum & Accreditation Alignment Agent
   agents/documents/         Educational Content & Document Generation Agent
   agents/marketing/         AI Marketing Agent
-  api/main.py               FastAPI app (+ orchestrator stub)
+  agents/orchestrator/      Orchestrator Agent: routing, flow checks and repairs between all agents
+  mcp/server.py             MCP tool server: the only code that calls external services (LLMs, e-mail, web...)
+  mcp/client.py             how agents call those tools
+  api/main.py               FastAPI app
 frontend/streamlit_app.py   chat UI
-frontend/pages/              RFP Research, Curriculum, Documents and Marketing pages of the same app
+frontend/pages/              RFP Research, Curriculum, Documents, Marketing, Orchestrator and Users pages
 scripts/build_kb.py         validates data, writes data/kb/kb_chunks.jsonl for a vector store
 tests/                      knowledge base, recommender and API tests
 ```
@@ -403,3 +406,59 @@ course_id, status, curriculum_id, language, q), `GET /campaigns/{id}`, `PATCH /c
 graduates, budget 3000 EGP" style messages here; only the course is required, the other §10 questions get defaults
 that are reported back as `assumed`. Channel rules, personas and the brand guide are team-made SAMPLE data — replace
 them with the academy's own.
+
+## Orchestrator Agent and the MCP tool server
+
+**One door to the outside world.** No agent calls OpenAI, Gemini, a mail server, a webhook or a web page itself:
+each goes through an MCP tool on the REX AI tool server (`rex_ai/mcp/server.py`) via `rex_ai/mcp/client.py`.
+
+| MCP tool | Used by |
+|---|---|
+| `llm_chat` (provider `openai` / `gemini`) | REX replies, RFP summaries, curriculum/document/campaign generation (OpenAI); change requests (Gemini) |
+| `embed_texts` | RAG with `REX_RAG_EMBEDDINGS=openai` |
+| `send_email` | approved documents, qualified tenders, RFP alerts, published campaigns |
+| `post_webhook` | RFP alerts to Slack / Teams / n8n |
+| `http_get` | live tender portals |
+| `smtp_check`, `service_status` | the orchestrator's health checks (no secrets returned) |
+
+By default the server runs inside the API process (still spoken to over MCP, one open connection, ~1 ms per call).
+To run it on its own - e.g. one tool server for several API instances, or to use the same tools from Claude Desktop
+or an IDE - start `python -m rex_ai.mcp.server --http` (port 8765, stdio without `--http`) and set
+`REX_MCP_URL=http://127.0.0.1:8765/mcp`. Keep it on 127.0.0.1: the tools use the API keys and the mail account.
+
+**The orchestrator** (`rex_ai/agents/orchestrator/agent.py`) keeps the flow working:
+
+- `POST /route` sends a chat request to the right agent and records it as a job; an agent that fails returns
+  `{"status": "error", "message": ...}` instead of a 500.
+- It checks every link of the flow - RFP → bid team, Curriculum → Documents → Marketing - plus the database, every
+  agent, the MCP tool server and each external service, and **repairs** what is safe: re-sends lost handoff events,
+  expires tenders past their deadline, marks jobs left "running" by a dead process as failed, retries e-mails of
+  approved documents. It reports (never decides) the rest: tenders, curricula or campaigns waiting too long for a
+  review, qualified tenders nobody was e-mailed, curricula revised after their handoff, missing keys, a refused mail
+  login (deep check).
+- It runs at API start-up and every `REX_ORCH_INTERVAL` seconds (default 300). These checks never approve, generate or
+  publish anything.
+
+**Tasks: tell the orchestrator what you need.** In the app, **Agents → Orchestrator Tasks**, an administrator writes a
+goal in plain language ("Create a curriculum for Power BI for finance staff, a participant guide, and a LinkedIn
+campaign for DS-101") and the orchestrator picks the agents and runs them, passing each result to the next step
+(`rex_ai/agents/orchestrator/tasks.py`).
+
+- *Planning.* An LLM (OpenAI, or Gemini if OpenAI is off or fails) chooses one tool at a time and sees each result, so
+  it can correct a failed step. A task is limited to `REX_ORCH_MAX_STEPS` steps (15). With no LLM working, a rule planner
+  handles the common requests: creating curricula, documents and campaigns (alone or chained), tender questions,
+  approving / publishing / e-mailing by id, flow status and course questions.
+- *Tools* (`tools.py`) are of three kinds: **read**, **draft** (runs at once; a person still reviews the result) and
+  **gated**: approving or rejecting, e-mailing, publishing and tender decisions. A gated step pauses the task until an
+  administrator confirms that exact action, shown with its recipients, and is recorded under that administrator's name.
+  The engine enforces this, so neither a plan nor text in a tender can skip it. Declining ends the task.
+- *Progress* is saved after each step (table `orchestrator_tasks`), so a task can wait for an answer or a confirmation
+  and carry on later, from any server. A task whose process stopped is marked failed by the flow check.
+
+Endpoints: `POST /orchestrator/tasks` (`{"message": ...}`, runs in the background), `GET /orchestrator/tasks`,
+`GET /orchestrator/tasks/{id}`, `POST /orchestrator/tasks/{id}/answers` (`{"answers": [...]}`) and
+`POST /orchestrator/tasks/{id}/decision` (`{"approve": true}`).
+
+Flow endpoints: `GET /orchestrator/status` (last report), `POST /orchestrator/check?repair=true&deep=false`,
+`GET /orchestrator/tools`, `GET /orchestrator/jobs`; `/health` includes the flow status. In the app:
+**Administration → Orchestrator & Tools**.

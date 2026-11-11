@@ -46,11 +46,8 @@ def _chat(messages: list[dict], temperature: float = 0.6) -> Optional[dict]:
     if not config.USE_LLM:
         return None
     try:
-        from openai import OpenAI
-        client = OpenAI(api_key=config.OPENAI_API_KEY)
-        resp = client.chat.completions.create(model=config.OPENAI_MODEL, messages=messages, temperature=temperature,
-                                              response_format={"type": "json_object"})
-        return json.loads(resp.choices[0].message.content)
+        from rex_ai.mcp import client as tools           # OpenAI through the MCP tool server
+        return json.loads(tools.chat("openai", messages, temperature=temperature, json_mode=True))
     except Exception as exc:
         log.warning("Marketing LLM call failed, keeping the rule-based copy: %s", exc)
         llm_status.record(exc)

@@ -51,7 +51,8 @@ def row_to_record(row: dict) -> RFPRecord:
                                    "eligibility_requirements", "training_category", "submission_link",
                                    "publication_date", "available_documents", "summary", "qualification",
                                    "qualification_notes", "status", "dedupe_hash", "last_checked",
-                                   "matched_course_ids", "priority", "first_seen")},
+                                   "matched_course_ids", "priority", "first_seen", "emailed_at")},
+        emailed_to=row.get("emailed_to") or [],
         relevance_score=row.get("relevance_score") or 0.0,
         source=SourceRef(source_id=row["source_id"], title=row.get("source_title") or row["source_id"],
                          url=row.get("source_url"), record_id=row["rfp_id"]))

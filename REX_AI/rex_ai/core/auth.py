@@ -18,6 +18,8 @@ import hashlib
 import hmac
 import re
 import secrets
+import threading
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -26,6 +28,12 @@ from rex_ai import config
 from rex_ai.core import db
 
 ROLES = ("user", "admin")
+# The API checks the login on every request; with a remote database that check is a network round trip, so a valid
+# token is remembered for a minute. Logging out and role changes take effect at once on this server, within
+# TOKEN_CACHE_SECONDS on others.
+TOKEN_CACHE_SECONDS = 60
+_token_cache: dict[str, tuple[float, dict]] = {}
+_token_lock = threading.Lock()
 ITERATIONS = 240_000
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 MIN_PASSWORD = 8
@@ -103,12 +111,24 @@ def login(email: str, password: str) -> tuple[dict, str]:
 def user_for_token(token: Optional[str]) -> Optional[dict]:
     if not token:
         return None
-    user = db.user_for_token(_token_hash(token))
-    return public(user) if user else None
+    key = _token_hash(token)
+    hit = _token_cache.get(key)
+    if hit and time.monotonic() - hit[0] < TOKEN_CACHE_SECONDS:
+        return dict(hit[1])
+    user = db.user_for_token(key)
+    if not user:
+        _token_cache.pop(key, None)
+        return None
+    with _token_lock:
+        if len(_token_cache) > 5000:
+            _token_cache.clear()
+        _token_cache[key] = (time.monotonic(), public(user))
+    return public(user)
 
 
 def logout(token: Optional[str]) -> None:
     if token:
+        _token_cache.pop(_token_hash(token), None)
         db.delete_token(_token_hash(token))
 
 
@@ -122,6 +142,7 @@ def set_role(user_id: str, role: str) -> dict:
         raise AuthError("Keep at least one administrator")
     db.set_user_role(user_id, role)
     db.log_event("INFO", "role_changed", detail=f"{user_id}: {user['role']} -> {role}")
+    _token_cache.clear()                           # the new role applies to this account's next request
     return public({**user, "role": role})
 
 

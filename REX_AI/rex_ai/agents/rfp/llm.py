@@ -36,12 +36,8 @@ def _chat(messages: list[dict], json_mode: bool = False) -> Optional[str]:
     if not config.USE_LLM:
         return None
     try:
-        from openai import OpenAI
-        client = OpenAI(api_key=config.OPENAI_API_KEY)
-        kwargs = {"response_format": {"type": "json_object"}} if json_mode else {}
-        resp = client.chat.completions.create(model=config.OPENAI_MODEL, messages=messages, temperature=0.1,
-                                              **kwargs)
-        return resp.choices[0].message.content.strip()
+        from rex_ai.mcp import client as tools       # OpenAI through the MCP tool server
+        return tools.chat("openai", messages, temperature=0.1, json_mode=json_mode).strip()
     except Exception as exc:
         log.warning("RFP LLM call failed, using rule-based output: %s", exc)
         return None

@@ -9,13 +9,13 @@ A tender a reviewer marks qualified is e-mailed to the address given with the de
 from __future__ import annotations
 
 import logging
-import smtplib
 import uuid
 from datetime import datetime, timezone
-from email.message import EmailMessage
 
 from rex_ai import config
+from rex_ai.agents.rfp import email_html
 from rex_ai.core import db, mailer
+from rex_ai.mcp import client as tools
 
 log = logging.getLogger("rex.rfp.alerts")
 
@@ -31,39 +31,40 @@ def _line(r: dict) -> str:
 def _send_webhook(text: str) -> bool:
     if not config.RFP_WEBHOOK_URL:
         return False
-    try:
-        import requests
-        r = requests.post(config.RFP_WEBHOOK_URL, json={"text": text}, timeout=10)
-        return r.status_code < 400
-    except Exception as exc:
+    try:                                                 # through the MCP tool server
+        return tools.call("post_webhook", url=config.RFP_WEBHOOK_URL, payload={"text": text})["ok"]
+    except tools.ToolCallError as exc:
         log.warning("RFP webhook failed: %s", exc)
         return False
 
 
-def _send_email(subject: str, text: str) -> bool:
-    if not (config.SMTP_HOST and config.RFP_ALERT_EMAILS):
-        return False
-    msg = EmailMessage()
-    msg["Subject"], msg["From"], msg["To"] = subject, config.SMTP_FROM, ", ".join(config.RFP_ALERT_EMAILS)
-    msg.set_content(text)
+def _record_sent(rfp_ids: list[str], to: list[str]) -> None:
+    """Mark the tenders as e-mailed (columns emailed_at / emailed_to). Runs after the e-mail went out, and a
+    database problem here never turns a sent e-mail into an error."""
     try:
-        with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT, timeout=20) as s:
-            s.starttls()
-            if config.SMTP_USER:
-                s.login(config.SMTP_USER, config.SMTP_PASSWORD)
-            s.send_message(msg)
-        return True
+        db.mark_rfp_emailed(rfp_ids, to)
     except Exception as exc:
+        log.warning("E-mail sent, but it could not be recorded on %s: %s", ", ".join(rfp_ids), exc)
+
+
+def _send_email(subject: str, text: str, html: str, rfp_ids: list[str]) -> bool:
+    if not (mailer.configured() and config.RFP_ALERT_EMAILS):
+        return False
+    try:
+        mailer.send(config.RFP_ALERT_EMAILS, subject, text, html=html)
+        _record_sent(rfp_ids, config.RFP_ALERT_EMAILS)
+        return True
+    except mailer.MailError as exc:
         log.warning("RFP alert e-mail failed: %s", exc)
         return False
 
 
-def _deliver(subject: str, text: str) -> list[str]:
+def _deliver(subject: str, text: str, html: str, rfp_ids: list[str]) -> list[str]:
     log.warning("%s\n%s", subject, text)       # WARNING so it stands out in the API console
     channels = ["dashboard", "log"]
     if _send_webhook(f"*{subject}*\n{text}"):
         channels.append("webhook")
-    if _send_email(subject, text):
+    if _send_email(subject, text, html, rfp_ids):
         channels.append("email")
     return channels
 
@@ -77,13 +78,15 @@ def notify(new_records: list[dict]) -> list[dict]:
 
     for r in egypt:                                     # one immediate alert per Egyptian tender
         message = _line(r)
-        channels = _deliver("[REX RFP] Egypt tender flagged for review", message)
+        channels = _deliver("[REX RFP] Egypt tender flagged for review", message, email_html.egypt_alert(r),
+                            [r["rfp_id"]])
         alerts.append({"alert_id": "ALR-" + uuid.uuid4().hex[:10], "rfp_id": r["rfp_id"], "country": "EG",
                        "priority": "high", "message": message, "channels": channels, "created_at": now})
 
     if saudi:                                           # one digest for the monitored Saudi pipeline
         text = "\n".join(f"- {_line(r)}" for r in saudi)
-        channels = _deliver(f"[REX RFP] {len(saudi)} new Saudi tender(s) added to monitoring", text)
+        channels = _deliver(f"[REX RFP] {len(saudi)} new Saudi tender(s) added to monitoring", text,
+                            email_html.saudi_digest(saudi), [r["rfp_id"] for r in saudi])
         for r in saudi:
             alerts.append({"alert_id": "ALR-" + uuid.uuid4().hex[:10], "rfp_id": r["rfp_id"], "country": "SA",
                            "priority": "normal", "message": _line(r), "channels": channels, "created_at": now})
@@ -113,7 +116,9 @@ def send_qualified(r: dict, to: str, reviewer: str, comment: str = "") -> dict:
     if r.get("available_documents"):
         lines += ["", "Documents: " + "; ".join(r["available_documents"])]
     lines += ["", f"Reference: {r['rfp_id']}", "-- Sent by REX AI (RFP Research Agent)"]
-    result = mailer.send([to], f"[REX RFP] Qualified: {r['title'][:120]}", "\n".join(lines))
+    result = mailer.send([to], f"[REX RFP] Qualified: {r['title'][:120]}", "\n".join(lines),
+                         html=email_html.qualified(r, reviewer, comment))
+    _record_sent([r["rfp_id"]], [to])                                 # mailer.send raised if it was not sent
     db.save_rfp_alert({"alert_id": "ALR-" + uuid.uuid4().hex[:10], "rfp_id": r["rfp_id"], "country": r["country"],
                        "priority": "qualified", "message": f"Qualified by {reviewer} - e-mailed to {to}: {_line(r)}",
                        "channels": ["email"], "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds")})

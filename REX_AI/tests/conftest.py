@@ -24,6 +24,8 @@ os.environ["REX_MARKETING_OUTPUT_DIR"] = str(Path(tempfile.mkdtemp()) / "campaig
 os.environ["REX_RFP_TODAY"] = "2026-10-24"
 os.environ["REX_RFP_WEBHOOK_URL"] = ""           # empty, not removed: .env must not fill them in
 os.environ["REX_SMTP_HOST"] = ""                 # no real e-mail from tests
+os.environ["REX_MCP_URL"] = ""                   # the MCP tool server runs in-process
+os.environ["REX_ORCH_INTERVAL"] = "0"            # no background flow checks; tests call them
 for _k, _v in (("REX_SMTP_PORT", "587"), ("REX_SMTP_USER", ""), ("REX_SMTP_PASSWORD", ""), ("REX_SMTP_FROM", "")):
     os.environ[_k] = _v                          # tests' fake SMTP server, whatever .env says
 # Never the shared database from .env: SQLite by default; REX_TEST_DATABASE_URL runs the whole suite on PostgreSQL in
@@ -35,6 +37,7 @@ for _name in ("DATABASE_URL", "DATABASE_URL_POOLED", "DATABASE_URL_UNPOOLED", "R
 os.environ["REX_SHARED_FILES"] = "0"
 # Agent tests call the API without logging in; tests/test_auth.py switches the login check on.
 os.environ["REX_API_AUTH"] = "0"
+os.environ["REX_API_CACHE"] = "0"             # tests change the database directly; test_api_cache.py switches it on
 os.environ["REX_ADMIN_SIGNUP_CODE"] = "test-admin-code"
 os.environ["REX_DB_SCHEMA"] = f"rex_test_{os.getpid()}_{int(time.time())}" if _TEST_PG else ""
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))

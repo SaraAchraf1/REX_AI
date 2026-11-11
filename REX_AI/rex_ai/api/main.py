@@ -5,7 +5,9 @@ Docs: http://localhost:8000/docs  (OpenAPI generated from rex_ai/core/schemas.py
 """
 from __future__ import annotations
 
+import asyncio
 import logging
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import Body, FastAPI, File, HTTPException, Request, UploadFile
@@ -20,11 +22,19 @@ from rex_ai.agents.rex.assistant import RexAssistant
 from rex_ai.agents.rex.knowledge_base import get_kb
 from rex_ai.agents.rex.text_utils import contains_any
 from rex_ai.agents.rfp import sources as rfp_sources
+from rex_ai.agents.orchestrator.agent import FlowWatcher, Orchestrator, last_report, summary_for
+from rex_ai.agents.orchestrator.tasks import TaskConflict, TaskOrchestrator
+from rex_ai.api import read_cache
 from rex_ai.agents.rfp.agent import RFPResearchAgent, row_to_record
 from rex_ai.agents.rfp.taxonomy import COUNTRY_PLACES
+from rex_ai.agents.orchestrator.parsing import (CURRICULUM_QUESTIONS, CURRICULUM_QUESTIONS_AR, DOCUMENT_QUESTIONS,
+                                                DOCUMENT_QUESTIONS_AR, MARKETING_QUESTIONS, MARKETING_QUESTIONS_AR,
+                                                ROUTING_HINTS, parse_curriculum_message, parse_document_message,
+                                                parse_marketing_message)
 from rex_ai.core import auth, data_sync, db, filestore
 from rex_ai.core.llm_status import LLMUnavailable
 from rex_ai.core.mailer import MailError
+from rex_ai.mcp import client as mcp_tools
 from rex_ai.core.schemas import (AgentName, ApprovalStatus, Campaign, CampaignEdit, CampaignPublish, CampaignRequest,
                                  Channel, ChannelInfo, ChatRequest, ChatResponse, Country, Course, Curriculum,
                                  CurriculumImport, CurriculumRequest, CurriculumResearch, CurriculumRevision,
@@ -33,7 +43,8 @@ from rex_ai.core.schemas import (AgentName, ApprovalStatus, Campaign, CampaignEd
                                  RoleUpdate, SignupRequest, UserPublic, GapReport, GapReportRequest, Lead, LeadCreate, RAGHit,
                                  RAGSearchRequest, RAGSearchResponse, ReviewAction, RFPAlert, RFPAskRequest,
                                  RFPAskResponse, RFPCategory, RFPRecord, RFPRunRequest, RFPRunResult, RFPStatus,
-                                 RFPStatusUpdate, RouteRequest, RouteResponse, SkillLevel)
+                                 RFPStatusUpdate, RouteRequest, RouteResponse, SkillLevel, TaskAnswers, TaskDecision,
+                                 TaskRequest)
 
 log = logging.getLogger("rex.api")
 
@@ -41,7 +52,13 @@ log = logging.getLogger("rex.api")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     rex()                                # merges/indexes new files in data/catalog/ and data/documents/
+    watcher = FlowWatcher()              # orchestrator: checks and repairs the agent flow every REX_ORCH_INTERVAL s
+    watcher.start()
+    warm = asyncio.create_task(read_cache.keep_warm(app))   # remembered answers stay fresh while people use them
     yield
+    warm.cancel()
+    watcher.stop()
+    mcp_tools.reset()                    # close the MCP tool-server connection
     db.close_pools()                     # shared database: give the connections back on shutdown
 
 
@@ -89,11 +106,14 @@ async def access_control(request: Request, call_next):
     identifies the account (conversations stay per account)."""
     from starlette.concurrency import run_in_threadpool
     path = request.url.path.rstrip("/") or "/"
+    if read_cache.is_refresh(request):           # the API refreshing its own cache (in-process, secret header)
+        return await call_next(request)
     token = _bearer(request)
-    user = await run_in_threadpool(auth.user_for_token, token) if token else None
+    public = path in PUBLIC or path.startswith(PUBLIC_PREFIXES)    # no account needed: skip the database lookup
+    user = await run_in_threadpool(auth.user_for_token, token) if token and not public else None
     request.state.user = user
     if not config.API_AUTH or path in PUBLIC or path.startswith(PUBLIC_PREFIXES):
-        return await call_next(request)
+        return await read_cache.handle(request, call_next, path)
     if user is None:
         return JSONResponse(status_code=401, content=ErrorResponse(
             code="not_authenticated", message="Log in first (Authorization: Bearer <token> from POST /auth/login)"
@@ -101,7 +121,7 @@ async def access_control(request: Request, call_next):
     if user["role"] != "admin" and not (path in USER_PATHS or path.startswith(USER_PREFIXES)):
         return JSONResponse(status_code=403, content=ErrorResponse(
             code="forbidden", message="Only administrators can use this agent").model_dump())
-    return await call_next(request)
+    return await read_cache.handle(request, call_next, path)      # allowed: answer from memory if nothing changed
 
 
 def _user(request: Request) -> dict | None:
@@ -169,7 +189,8 @@ def health() -> dict:
     retriever = rex().retriever
     kb = get_kb()
     return {"status": "ok", "courses": len(kb.courses), "data_status": kb.meta.get("status"),
-            "llm_enabled": config.USE_LLM, "gemini_edits_enabled": config.USE_GEMINI, "retriever": type(retriever).__name__,
+            "llm_enabled": config.USE_LLM, "gemini_edits_enabled": config.USE_GEMINI, "mcp_tools": mcp_tools.target(),
+            "flow": summary_for(last_report()) if last_report() else None, "retriever": type(retriever).__name__,
             "embedder": getattr(retriever, "backend", "tfidf"), "database": db.describe()}
 
 
@@ -775,97 +796,131 @@ def campaign_pdf(campaign_id: str):
 
 
 # ---------------------------------------------------------- Orchestrator
-DOC_TYPE_HINTS = {
-    "course_description": ["course description", "course brochure", "وصف الدورة", "وصف دورة"],
-    "course_proposal": ["proposal", "عرض تدريبي", "عرض فني"],
-    "curriculum_pdf": ["curriculum pdf", "curriculum document"],
-    "participant_guide": ["participant guide", "learner guide", "student guide", "trainee guide", "workbook",
-                          "دليل المتدرب", "دليل المشارك"],
-    "facilitator_guide": ["facilitator guide", "instructor guide", "trainer guide", "دليل المدرب", "دليل الميسر"],
-    "presentation_outline": ["presentation", "slides", "slide deck", "عرض تقديمي", "شرائح"],
-    "question_bank": ["question bank", "quiz questions", "exam questions", "بنك الأسئلة", "بنك الاسئلة", "بنك أسئلة"],
-    "assessment_rubric": ["rubric", "معايير التقييم", "روبريك"],
-    "capstone_brief": ["capstone brief", "project brief", "موجز المشروع"],
-    "outcomes_assessment_plan": ["assessment plan", "outcomes plan", "خطة التقييم", "خطة نواتج التعلم"],
-}
-# Order matters: a document or campaign request often names its curriculum ("participant guide for curriculum
-# CUR-...", "campaign for curriculum CUR-..."), so both are checked before the curriculum keywords.
-ROUTING_HINTS = {
-    AgentName.rfp_research: ["tender", "rfp", "rfq", "مناقصه", "مناقصة", "مناقصات", "منافسة", "منافسات"],
-    AgentName.document: ["pdf"] + [h for hints in DOC_TYPE_HINTS.values() for h in hints],
-    # Requests only: not bare "marketing", "offer" or "ad" - a lead asking about the Digital Marketing course, current
-    # offers or "your Facebook ad" stays with REX
-    AgentName.marketing: ["campaign", "ad copy", "linkedin post", "caption", "whatsapp message", "حمله", "حملة",
-                          "promote", "marketing content", "marketing copy", "marketing email", "ترويج", "روّج"],
-    AgentName.curriculum: ["curriculum", "syllabus design", "accreditation", "منهج", "اعتماد"],
-}
+_first_check = threading.Lock()
+
+
+@app.get("/orchestrator/status", tags=["Orchestrator"])
+def orchestrator_status() -> dict:
+    """The last flow report (checked at start-up and every REX_ORCH_INTERVAL s). If there is none yet, the first check
+    starts in the background and this answers at once with pending=true (a full check takes 10-30 s)."""
+    rex()
+    if report := last_report():
+        return report
+    if _first_check.acquire(blocking=False):
+        def run():
+            try:
+                Orchestrator().check(repair=False)
+            finally:
+                _first_check.release()
+        threading.Thread(target=run, name="rex-first-check", daemon=True).start()
+    from datetime import datetime, timezone
+    return {"status": "warning", "pending": True, "checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "repair": False, "deep": False, "summary": {"warning": 1}, "repairs": [], "pipeline": Orchestrator().pipeline(),
+            "checks": [{"area": "infrastructure", "name": "Flow check", "status": "warning", "items": [],
+                        "detail": "The first check of every agent and handoff is running - it appears here in a few "
+                                  "seconds."}]}
+
+
+@app.post("/orchestrator/check", tags=["Orchestrator"])
+def orchestrator_check(repair: bool = True, deep: bool = False) -> dict:
+    """Check every agent, the MCP tools and each handoff now. repair=true fixes missing handoffs, expired tenders,
+    stuck jobs and pending document e-mails; deep=true also logs in to the mail server (sends nothing)."""
+    rex()
+    return Orchestrator().check(repair=repair, deep=deep)
+
+
+@app.get("/orchestrator/tools", tags=["Orchestrator"])
+def orchestrator_tools():
+    """The MCP tool server the agents use for every external service, its tools and which services are set up."""
+    try:
+        return {"server": mcp_tools.target(), "tools": mcp_tools.list_tools(),
+                "services": mcp_tools.call("service_status")}
+    except mcp_tools.ToolCallError as exc:
+        return _error(502, "mcp_unavailable", str(exc))
+
+
+@app.get("/orchestrator/jobs", tags=["Orchestrator"])
+def orchestrator_jobs(status: str | None = None, agent: str | None = None, limit: int = 50) -> list[dict]:
+    """Agent runs (generation, routed requests): queued -> running -> succeeded / failed, newest first."""
+    rex()
+    return db.list_jobs(status=status, agent=agent, limit=min(limit, 500))
+
+
+def _admin_name(request: Request) -> str:
+    user = _user(request)
+    return user["name"] if user else "administrator"
+
+
+def _resume(task_id: str, change) -> dict | JSONResponse:
+    """Apply an answer or a confirmation, then carry on in the background unless that ended the task."""
+    orch = TaskOrchestrator()
+    try:
+        task = change(orch)
+    except LookupError as exc:
+        return _error(404, "not_found", str(exc))
+    except TaskConflict as exc:
+        return _error(409, "conflict", str(exc))
+    if task["status"] == "running":
+        orch.start(task_id)
+    return task
+
+
+@app.post("/orchestrator/tasks", status_code=202, tags=["Orchestrator"])
+def task_create(req: TaskRequest, request: Request) -> dict:
+    """Give the orchestrator a task in plain language. It runs in the background: follow it with GET
+    /orchestrator/tasks/{task_id}. status needs_input -> POST .../answers; awaiting_approval -> POST .../decision."""
+    rex()
+    orch = TaskOrchestrator()
+    task = orch.submit(req.message, _admin_name(request))
+    orch.start(task["task_id"])
+    return task
+
+
+@app.get("/orchestrator/tasks", tags=["Orchestrator"])
+def task_list(status: str | None = None, limit: int = 30) -> list[dict]:
+    """Tasks, newest first."""
+    rex()
+    return db.list_tasks(status=status, limit=min(limit, 200))
+
+
+@app.get("/orchestrator/tasks/{task_id}", tags=["Orchestrator"], responses={404: {"model": ErrorResponse}})
+def task_get(task_id: str):
+    """A task: status, each step with its result, what it created, and any question or action waiting for a person."""
+    task = db.get_task(task_id)
+    return task or _error(404, "not_found", f"Task {task_id} not found")
+
+
+@app.post("/orchestrator/tasks/{task_id}/answers", tags=["Orchestrator"],
+          responses={404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}})
+def task_answers(task_id: str, req: TaskAnswers):
+    """Answer the questions of a task in status needs_input, in the same order."""
+    return _resume(task_id, lambda orch: orch.answer(task_id, req.answers))
+
+
+@app.post("/orchestrator/tasks/{task_id}/decision", tags=["Orchestrator"],
+          responses={404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}})
+def task_decision(task_id: str, req: TaskDecision, request: Request):
+    """Confirm or decline the action a task paused on. Recorded under the logged-in administrator's name."""
+    return _resume(task_id, lambda orch: orch.decide(task_id, req.approve, _admin_name(request)))
 
 
 @app.post("/route", response_model=RouteResponse, tags=["Orchestrator"])
 def route(req: RouteRequest) -> RouteResponse:
-    """Keyword router. Agents not built yet return a 'not_implemented' result."""
+    """Orchestrator: keyword routing to the right agent. Every routed run is a tracked job; an agent that fails
+    returns {"status": "error", "message": ...} instead of a 500."""
     text = req.message.lower()
+    handlers = {AgentName.rfp_research: ("rfp_search", route_rfp),
+                AgentName.curriculum: ("curriculum_design", route_curriculum),
+                AgentName.document: ("document_generation", route_document),
+                AgentName.marketing: ("campaign_generation", route_marketing)}
     for agent, hints in ROUTING_HINTS.items():
         if any(h in text for h in hints):
-            if agent == AgentName.rfp_research:
-                return RouteResponse(agent=agent, intent="rfp_search", confidence=0.7, result=route_rfp(req.message))
-            if agent == AgentName.curriculum:
-                return RouteResponse(agent=agent, intent="curriculum_design", confidence=0.7,
-                                     result=route_curriculum(req.message))
-            if agent == AgentName.document:
-                return RouteResponse(agent=agent, intent="document_generation", confidence=0.7,
-                                     result=route_document(req.message))
-            return RouteResponse(agent=agent, intent="campaign_generation", confidence=0.7,
-                                 result=route_marketing(req.message))
+            intent, handler = handlers[agent]
+            result = Orchestrator().dispatch(agent, intent, req.message, lambda: handler(req.message))
+            return RouteResponse(agent=agent, intent=intent, confidence=0.7, result=result)
     resp = rex().handle(ChatRequest(session_id=req.session_id, message=req.message))
     return RouteResponse(agent=AgentName.rex_assistant, intent=resp.intent, confidence=0.8,
                          result=resp.model_dump(mode="json"))
-
-CURRICULUM_QUESTIONS = {
-    "course_title": "What course would you like to create?",
-    "target_audience": "Who is the target audience?",
-    "skill_level": "What is the intended skill level (beginner, intermediate, advanced)?",
-    "total_hours": "How many training hours are available?",
-}
-CURRICULUM_QUESTIONS_AR = {
-    "course_title": "ما الدورة التي تريد تصميم منهجها؟",
-    "target_audience": "من هي الفئة المستهدفة؟",
-    "skill_level": "ما المستوى المطلوب (مبتدئ، متوسط، متقدم)؟",
-    "total_hours": "كم عدد ساعات التدريب المتاحة؟",
-}
-
-
-def parse_curriculum_message(message: str) -> dict:
-    """'Design a curriculum for Power BI for finance staff, beginner, 30 hours, ISTQB' -> request fields."""
-    import re
-    from rex_ai.agents.curriculum.frameworks import load_frameworks
-    from rex_ai.agents.rex.text_utils import detect_language
-    out: dict = {"language": detect_language(message)}
-    m = re.search(r"(?:curriculum|syllabus|منهج(?:ا)?)\s+(?:for|on|about|of|لـ?|عن|في)\s+(?:an?\s+|the\s+)?"
-                  r"(.+?)(?=\s+for\s+|\s+لـ?\s*|,|\.|;|\s+with\s+|\s+at\s+|\s+\d|$)", message, re.I)
-    if m and m.group(1).strip():
-        out["course_title"] = m.group(1).strip(" '\"")
-    rest = message[m.end():] if m else message
-    m = re.search(r"\bfor\s+(?!a\b|an\b|the\b)(.+?)(?=,|\.|;|،|\s+\d|\s+at\s+|\s+with\s+|$)", rest, re.I)
-    if m:
-        out["target_audience"] = m.group(1).strip()
-    elif m := re.search(r"(?:^|\s)لل(\w+)", rest):          # "للمحاسبين" = "for the accountants"
-        out["target_audience"] = "ال" + m.group(1)
-    if h := re.search(r"(\d{1,4})\s*(?:hours?|hrs?|h\b|ساعة|ساعات)", message, re.I):
-        out["total_hours"] = int(h.group(1))
-    for level, words in (("Beginner", ["beginner", "مبتدئ"]), ("Intermediate", ["intermediate", "متوسط"]),
-                         ("Advanced", ["advanced", "متقدم"])):
-        if contains_any(message, words):
-            out["skill_level"] = level
-    for f in load_frameworks().values():
-        if contains_any(message, [f.short_name, *f.aliases]) and f.framework_id != "REX-QUALITY":
-            out["accreditation_framework"] = f.framework_id
-            break
-    for code, places in COUNTRY_PLACES.items():
-        if contains_any(message, places):
-            out["country"] = code
-    return out
-
 
 def route_curriculum(message: str) -> dict:
     """Design a curriculum from chat; asks the brief's discovery questions for anything missing."""
@@ -890,49 +945,6 @@ def route_rfp(message: str) -> dict:
     return resp.model_dump(mode="json")
 
 
-DOCUMENT_QUESTIONS = {
-    "doc_type": "Which document type do you need? (course description, proposal, curriculum PDF, participant guide, "
-                "facilitator guide, presentation outline, question bank, rubrics, capstone brief, outcomes and "
-                "assessment plan)",
-    "source": "Which course or curriculum should be used? (a course id such as DS-101, or a curriculum id CUR-...)",
-}
-DOCUMENT_QUESTIONS_AR = {
-    "doc_type": "ما نوع المستند المطلوب؟ (وصف الدورة، عرض تدريبي، المنهج PDF، دليل المتدرب، دليل المدرب، مخطط العرض "
-                "التقديمي، بنك الأسئلة، معايير التقييم، موجز المشروع الختامي، خطة النواتج والتقييم)",
-    "source": "ما الدورة أو المنهج المطلوب؟ (رمز دورة مثل DS-101 أو رقم منهج CUR-...)",
-}
-
-
-def parse_document_message(message: str) -> dict:
-    """'Participant guide for DS-101 in Arabic' -> {doc_type, course_id, language}. Uses stored ids and catalogue
-    titles, so nothing already known is asked again."""
-    import re
-    from rex_ai.agents.curriculum.research import _words
-    from rex_ai.agents.rex.text_utils import detect_language
-    out: dict = {"language": "ar" if re.search(r"\b(arabic)\b|بالعربي|باللغة العربية", message, re.I)
-                 else "en" if re.search(r"\benglish\b|بالإنجليزي|بالانجليزي", message, re.I)
-                 else detect_language(message)}
-    for doc_type, hints in DOC_TYPE_HINTS.items():
-        if contains_any(message, hints):
-            out["doc_type"] = doc_type
-            break
-    if m := re.search(r"\bCUR-[0-9A-F]{8}\b", message, re.I):
-        out["curriculum_id"] = m.group(0).upper()
-    courses = rex().kb.courses
-    if m := re.search(r"\b([A-Z]{2,4}-\d{3})\b", message, re.I):
-        if m.group(1).upper() in courses:
-            out["course_id"] = m.group(1).upper()
-    if not (out.get("course_id") or out.get("curriculum_id")):
-        words = _words(message)
-        best = max(((len(words & _words(f"{c.title_en} {c.title_ar}")), c.course_id) for c in courses.values()),
-                   default=(0, None))
-        if best[0] >= 2:
-            out["course_id"] = best[1]
-    if m := re.search(r"\bfor\s+(?:the\s+)?(.+?)(?:\s+(?:team|staff|department))\b", message, re.I):
-        out["audience"] = m.group(0)[4:].strip()
-    return out
-
-
 def route_document(message: str) -> dict:
     """Generate a document from chat; asks the brief's discovery questions (§10) for what is missing."""
     fields = parse_document_message(message)
@@ -951,13 +963,6 @@ def route_document(message: str) -> dict:
             "next": f"Review it: POST /documents/{doc.document_id}/review"}
 
 
-MARKETING_QUESTIONS = {
-    "course_id": "Which course are we promoting? (a course id such as DS-101, or its title)",
-}
-MARKETING_QUESTIONS_AR = {
-    "course_id": "ما الدورة التي نروّج لها؟ (رمز دورة مثل DS-101 أو اسمها)",
-}
-# Asked as follow-ups when not given (brief §10); sensible defaults are used meanwhile and reported as "assumed"
 MARKETING_DEFAULTS = {
     "target_audience": "the course's target audience from the catalogue",
     "channels": "all five channels",
@@ -965,61 +970,6 @@ MARKETING_DEFAULTS = {
     "budget": "no paid budget given",
     "offer / cta": "the current promotion and the objective's call to action",
 }
-CHANNEL_HINTS = {
-    Channel.social_caption: ["caption", "social media post", "instagram post", "facebook post", "منشور", "بوست"],
-    Channel.facebook_instagram_ad: ["facebook ad", "instagram ad", "meta ad", "ad copy", "ads", "إعلان", "اعلان"],
-    Channel.linkedin_post: ["linkedin", "لينكد"],
-    Channel.email: ["email", "e-mail", "newsletter", "بريد", "ايميل", "إيميل"],
-    Channel.whatsapp: ["whatsapp", "واتساب", "واتس"],
-}
-OBJECTIVE_HINTS = {"awareness": ["awareness", "reach", "brand", "الوعي", "انتشار"],
-                   "webinar sign-ups": ["webinar", "info session", "ندوة", "جلسة تعريفية"],
-                   "leads": ["leads", "lead generation", "inquiries", "عملاء محتملين"],
-                   "registrations": ["registration", "enrol", "enroll", "sign up", "تسجيل"]}
-
-
-def parse_marketing_message(message: str) -> dict:
-    """'LinkedIn post and WhatsApp message to promote DS-101 for fresh graduates, budget 5000 EGP' -> request fields.
-    Uses stored course ids and catalogue titles, so nothing already known is asked again."""
-    import re
-    from rex_ai.agents.curriculum.research import _words
-    from rex_ai.agents.rex.text_utils import detect_language
-    out: dict = {"language": "ar" if re.search(r"\barabic\b|بالعربي|باللغة العربية", message, re.I)
-                 else "en" if re.search(r"\benglish\b|بالإنجليزي|بالانجليزي", message, re.I)
-                 else detect_language(message)}
-    courses = rex().kb.courses
-    if m := re.search(r"\b([A-Z]{2,4}-\d{3})\b", message, re.I):
-        if m.group(1).upper() in courses:
-            out["course_id"] = m.group(1).upper()
-    if m := re.search(r"\bCUR-[0-9A-F]{8}\b", message, re.I):
-        out["curriculum_id"] = m.group(0).upper()
-        row = db.get_curriculum(out["curriculum_id"])
-        if row and row.get("course_id") and "course_id" not in out:
-            out["course_id"] = row["course_id"].upper()
-    if "course_id" not in out:
-        words = _words(message)
-        best = max(((len(words & _words(f"{c.title_en} {c.title_ar}")), c.course_id) for c in courses.values()),
-                   default=(0, None))
-        if best[0] >= 2:
-            out["course_id"] = best[1]
-    channels = [ch.value for ch, hints in CHANNEL_HINTS.items() if contains_any(message, hints)]
-    if channels:
-        out["channels"] = channels
-    for objective, hints in OBJECTIVE_HINTS.items():
-        if contains_any(message, hints):
-            out["objective"] = objective
-            break
-    if m := re.search(r"budget\s*(?:of|:)?\s*([\d,]+)|([\d,]+)\s*(?:egp|sar|جنيه|ريال)|ميزانية\s*([\d,]+)", message, re.I):
-        out["budget"] = float(next(g for g in m.groups() if g).replace(",", ""))
-    if m := re.search(r"\b(?:for|targeting|aimed at)\s+(?!the\s+course\b|[A-Z]{2,4}-\d{3}\b|CUR-)(.+?)"
-                      r"(?=,|\.|;|\s+(?:with|budget|in\s+arabic|in\s+english|on\s+(?:linkedin|facebook|instagram|"
-                      r"whatsapp))\b|$)", message, re.I):
-        out["target_audience"] = m.group(1).strip()
-    if m := re.search(r"(\d)\s*(?:variations?|variants?|versions?)", message, re.I):
-        out["variations_per_channel"] = max(1, min(5, int(m.group(1))))
-    return out
-
-
 def route_marketing(message: str) -> dict:
     """Generate a campaign from chat. Only the course is required; the brief's other questions (§10) get defaults that
     are reported back, so the admin can refine them in the Marketing page or with POST /campaigns."""

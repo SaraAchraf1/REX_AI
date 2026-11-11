@@ -16,16 +16,14 @@ def polish(draft: str, facts: dict, language: str, history: list[dict]) -> Optio
     if not config.USE_LLM:
         return None
     try:
-        from openai import OpenAI  # imported lazily so the package stays optional
-        client = OpenAI(api_key=config.OPENAI_API_KEY)
+        from rex_ai.mcp import client as tools       # OpenAI through the MCP tool server
         messages = [{"role": "system", "content": SYSTEM_PROMPT.format(
             language_name="Arabic" if language == "ar" else "English")}]
         messages += [{"role": m["role"], "content": m["content"]} for m in history[-6:]]
         messages.append({"role": "user", "content":
                          f"DRAFT:\n{draft}\n\nFACTS:\n{json.dumps(facts, ensure_ascii=False, default=str)[:6000]}\n\n"
                          "Rewrite the DRAFT as the final reply to the user's last message."})
-        resp = client.chat.completions.create(model=config.OPENAI_MODEL, messages=messages, temperature=0.3)
-        return resp.choices[0].message.content.strip()
+        return tools.chat("openai", messages, temperature=0.3).strip()
     except Exception as exc:  # network, quota, missing package...
         log.warning("LLM polish failed, using deterministic reply: %s", exc)
         return None
