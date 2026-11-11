@@ -19,7 +19,9 @@ import json
 import re
 import sqlite3
 import threading
+import time
 import uuid
+import weakref
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -54,6 +56,17 @@ def describe() -> str:
 
 _pools: dict[str, object] = {}
 _pool_lock = threading.Lock()
+# A remote database costs a network round trip per statement (~250-450 ms from Egypt to Neon us-east-1), so a
+# connection that was used a moment ago is not pinged again before it is handed out.
+_last_used: "weakref.WeakKeyDictionary" = weakref.WeakKeyDictionary()
+CHECK_IDLE_SECONDS = 30
+
+
+def _check_if_idle(conn) -> None:
+    """Pool check: ping only connections idle for a while (the server may have closed them meanwhile)."""
+    if time.monotonic() - _last_used.get(conn, 0.0) > CHECK_IDLE_SECONDS:
+        from psycopg_pool import ConnectionPool
+        ConnectionPool.check_connection(conn)
 
 
 def _pool():
@@ -67,9 +80,10 @@ def _pool():
             if not _pools:                             # close cleanly when a script or the server exits
                 import atexit
                 atexit.register(close_pools)
-            _pools[key] = ConnectionPool(url, min_size=1, max_size=config.DB_POOL_SIZE, kwargs=_pg_kwargs(),
-                                         check=ConnectionPool.check_connection, max_idle=300, open=True,
-                                         name="rex-db")
+            # autocommit: connect() opens a transaction only once a block writes, so a read is one round trip
+            _pools[key] = ConnectionPool(url, min_size=1, max_size=config.DB_POOL_SIZE,
+                                         kwargs={**_pg_kwargs(), "autocommit": True}, check=_check_if_idle,
+                                         max_idle=300, open=True, name="rex-db")
         return _pools[key]
 
 
@@ -100,29 +114,54 @@ def close_pools() -> None:
 class _PgConn:
     """The few sqlite3.Connection methods db.py uses, on a psycopg connection (SQL translated on the fly)."""
 
-    def __init__(self, raw):
+    def __init__(self, raw, lazy_transaction: bool = False):
         self.raw = raw
+        self.lazy = lazy_transaction                # autocommit connection: BEGIN before the first write
+        self.in_transaction = False
+
+    def _before(self, sql: str) -> None:
+        if self.lazy and not self.in_transaction and sql.lstrip()[:6].upper() != "SELECT":
+            self.raw.execute("BEGIN")
+            self.in_transaction = True
 
     def execute(self, sql: str, args=()):
+        self._before(sql)
         return self.raw.execute(_pg_sql(sql), tuple(args) if args else None)
 
     def executemany(self, sql: str, rows):
         rows = [tuple(r) for r in rows]
         cur = self.raw.cursor()
         if rows:
+            self._before(sql)
             cur.executemany(_pg_sql(sql), rows)
         return cur
 
     def executescript(self, script: str):
+        self._before(script)
         self.raw.execute(_pg_schema(script))
 
 
 @contextmanager
 def connect(db_path: Optional[Path] = None) -> Iterator:
-    """A transaction: committed when the block ends, rolled back on an error. db_path only applies to SQLite."""
+    """A transaction: committed when the block ends, rolled back on an error. db_path only applies to SQLite.
+    PostgreSQL: the transaction starts at the block's first write, so a block that only reads costs one round trip
+    per SELECT (under READ COMMITTED a read before BEGIN sees exactly what it would see inside the transaction)."""
     if backend() == "postgres":
-        with _pool().connection() as raw:          # commits on success, rolls back on an exception
-            yield _PgConn(raw)
+        with _pool().connection() as raw:
+            conn = _PgConn(raw, lazy_transaction=True)
+            try:
+                yield conn
+                if conn.in_transaction:
+                    raw.execute("COMMIT")
+            except BaseException:
+                if conn.in_transaction and not raw.closed:
+                    try:
+                        raw.execute("ROLLBACK")
+                    except Exception:                  # a broken connection: the pool discards it
+                        pass
+                raise
+            finally:
+                _last_used[raw] = time.monotonic()
         return
     conn = sqlite3.connect(db_path or config.DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -193,10 +232,24 @@ def _pg_schema(script: str) -> str:
     return re.sub(r"\bBLOB\b", "BYTEA", script)
 
 
+_schema_ready: set = set()                         # PostgreSQL databases whose tables this process already checked
+
+
 def init_db(db_path: Optional[Path] = None, seed: bool = True) -> None:
-    with (_direct() if backend() == "postgres" else connect(db_path)) as conn:
-        if backend() == "postgres" and config.DB_SCHEMA:
-            conn.raw.execute(f'CREATE SCHEMA IF NOT EXISTS "{config.DB_SCHEMA}"')
+    if backend() == "postgres":
+        key = f"{config.DATABASE_URL}|{config.DB_SCHEMA}"
+        if key not in _schema_ready:               # tables and columns: once per process (a new connection + DDL)
+            with _direct() as conn:
+                if config.DB_SCHEMA:
+                    conn.raw.execute(f'CREATE SCHEMA IF NOT EXISTS "{config.DB_SCHEMA}"')
+                conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+                _migrate(conn)
+            _schema_ready.add(key)
+        if seed:
+            with connect() as conn:
+                _seed(conn)
+        return
+    with connect(db_path) as conn:
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
         _migrate(conn)
         if seed:
@@ -206,7 +259,8 @@ def init_db(db_path: Optional[Path] = None, seed: bool = True) -> None:
 # Columns added after Sprint 1: CREATE TABLE IF NOT EXISTS does not add them to an existing database.
 _ADDED_COLUMNS = {
     "rfps": {"source_title": "TEXT", "relevance_score": "REAL NOT NULL DEFAULT 0", "matched_course_ids": "TEXT",
-             "priority": "TEXT NOT NULL DEFAULT 'normal'", "first_seen": "TEXT"},
+             "priority": "TEXT NOT NULL DEFAULT 'normal'", "first_seen": "TEXT", "emailed_at": "TEXT",
+             "emailed_to": "TEXT"},
     "documents": {"content": "TEXT", "request": "TEXT", "version": "INTEGER NOT NULL DEFAULT 1", "updated_at": "TEXT"},
     "campaigns": {"content": "TEXT", "document_id": "TEXT", "language": "TEXT", "version": "INTEGER NOT NULL DEFAULT 1",
                   "updated_at": "TEXT"},
@@ -216,11 +270,15 @@ _ADDED_COLUMNS = {
 
 
 def _migrate(conn) -> None:
-    for table, columns in _ADDED_COLUMNS.items():
-        if backend() == "postgres":
+    if backend() == "postgres":                    # one query for what exists, then only the missing columns
+        have = {(r["table_name"], r["column_name"]) for r in conn.raw.execute(
+            "SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = current_schema()")}
+        for table, columns in _ADDED_COLUMNS.items():
             for name, decl in columns.items():
-                conn.raw.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {name} {_pg_schema(decl)}")
-            continue
+                if (table, name) not in have:
+                    conn.raw.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {name} {_pg_schema(decl)}")
+        return
+    for table, columns in _ADDED_COLUMNS.items():
         existing = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
         for name, decl in columns.items():
             if name not in existing:
@@ -363,10 +421,35 @@ def finish_job(job_id: str, status: str, output_ref: Optional[str] = None, error
                      (status, output_ref, error, _now(), job_id))
 
 
+def list_jobs(status: Optional[str] = None, agent: Optional[str] = None, since: Optional[str] = None,
+              limit: int = 100, db_path: Optional[Path] = None) -> list[dict]:
+    """Newest first; since = ISO time (started_at >= since)."""
+    sql, args = "SELECT * FROM job_runs WHERE 1=1", []
+    for col, op, val in (("status", "=", status), ("agent", "=", agent), ("started_at", ">=", since)):
+        if val:
+            sql += f" AND {col}{op}?"
+            args.append(val)
+    sql += " ORDER BY started_at DESC, rowid DESC LIMIT ?"
+    args.append(limit)
+    with connect(db_path) as conn:
+        return [{**dict(r), "input": json.loads(r["input"]) if r["input"] else {}} for r in conn.execute(sql, args)]
+
+
+def fail_stale_jobs(started_before: str, reason: str, db_path: Optional[Path] = None) -> list[str]:
+    """Jobs still 'running' that started before the given ISO time are marked failed (their process died)."""
+    with connect(db_path) as conn:
+        ids = [r["job_id"] for r in conn.execute(
+            "SELECT job_id FROM job_runs WHERE status='running' AND started_at < ?", (started_before,))]
+        for job_id in ids:
+            conn.execute("UPDATE job_runs SET status='failed', error=?, finished_at=? WHERE job_id=?",
+                         (reason, _now(), job_id))
+    return ids
+
+
 # --------------------------------------------------------------------------- #
 # Tender / RFP research (owner: Member 2)
 # --------------------------------------------------------------------------- #
-_RFP_JSON = ("available_documents", "matched_course_ids")
+_RFP_JSON = ("available_documents", "matched_course_ids", "emailed_to")
 
 
 def _rfp_row(row) -> dict:
@@ -455,6 +538,20 @@ def save_rfp_alert(alert: dict, db_path: Optional[Path] = None) -> None:
         conn.execute("INSERT INTO rfp_alerts VALUES (?,?,?,?,?,?,?)",
                      (alert["alert_id"], alert["rfp_id"], alert["country"], alert["priority"], alert["message"],
                       json.dumps(alert["channels"]), alert["created_at"]))
+
+
+def mark_rfp_emailed(rfp_ids: list[str], to: list[str], db_path: Optional[Path] = None) -> None:
+    """Record on each tender that an e-mail about it was sent: when (emailed_at) and to whom (emailed_to, every
+    address it was ever sent to). Call only after the mail server accepted the message."""
+    now = _now()
+    with connect(db_path) as conn:
+        for rfp_id in dict.fromkeys(rfp_ids):
+            row = conn.execute("SELECT emailed_to FROM rfps WHERE rfp_id=?", (rfp_id,)).fetchone()
+            if row is None:
+                continue
+            before = json.loads(row["emailed_to"]) if row["emailed_to"] else []
+            conn.execute("UPDATE rfps SET emailed_at=?, emailed_to=? WHERE rfp_id=?",
+                         (now, json.dumps(list(dict.fromkeys(before + list(to)))), rfp_id))
 
 
 def list_rfp_alerts(limit: int = 50, db_path: Optional[Path] = None) -> list[dict]:
@@ -743,6 +840,49 @@ def list_campaign_versions(campaign_id: str, db_path: Optional[Path] = None) -> 
         return [{**dict(r), "content": json.loads(r["content"])} for r in rows]
 
 
+# Batch reads for lists that show many records at once: one round trip instead of one per record.
+def _in(ids) -> tuple[str, list]:
+    ids = list(dict.fromkeys(ids))
+    return ",".join("?" * len(ids)), ids
+
+
+def get_curricula(ids, db_path: Optional[Path] = None) -> dict[str, dict]:
+    marks, ids = _in(ids)
+    if not ids:
+        return {}
+    with connect(db_path) as conn:
+        rows = conn.execute(f"SELECT * FROM curricula WHERE curriculum_id IN ({marks})", ids)
+        return {r["curriculum_id"]: _curriculum_row(r) for r in rows}
+
+
+def get_documents(ids, db_path: Optional[Path] = None) -> dict[str, dict]:
+    marks, ids = _in(ids)
+    if not ids:
+        return {}
+    with connect(db_path) as conn:
+        rows = conn.execute(f"SELECT * FROM documents WHERE document_id IN ({marks})", ids)
+        return {r["document_id"]: _document_row(r) for r in rows}
+
+
+def document_types_by_curriculum(curriculum_ids, db_path: Optional[Path] = None) -> dict[str, list[str]]:
+    """curriculum_id -> doc_type of each document made from it (no document content is read)."""
+    marks, ids = _in(curriculum_ids)
+    out: dict[str, list[str]] = {i: [] for i in ids}
+    if ids:
+        with connect(db_path) as conn:
+            for r in conn.execute(f"SELECT curriculum_id, doc_type FROM documents WHERE content IS NOT NULL "
+                                  f"AND curriculum_id IN ({marks})", ids):
+                out[r["curriculum_id"]].append(r["doc_type"])
+    return out
+
+
+def campaign_sources(db_path: Optional[Path] = None) -> list[dict]:
+    """document_id and curriculum_id of every campaign (no campaign content is read)."""
+    with connect(db_path) as conn:
+        return [dict(r) for r in conn.execute(
+            "SELECT document_id, curriculum_id FROM campaigns WHERE content IS NOT NULL")]
+
+
 def list_handoffs_to(to_agent: str, db_path: Optional[Path] = None) -> list[dict]:
     with connect(db_path) as conn:
         rows = conn.execute("SELECT * FROM handoff_events WHERE to_agent=? ORDER BY created_at DESC, rowid DESC",
@@ -867,6 +1007,69 @@ def get_file(path: str, db_path: Optional[Path] = None) -> Optional[bytes]:
     with connect(db_path) as conn:
         row = conn.execute("SELECT content FROM stored_files WHERE path=?", (path,)).fetchone()
         return bytes(row["content"]) if row else None
+
+
+# --------------------------------------------------------------------------- #
+# Orchestrator tasks (an administrator's request, carried out step by step)
+# --------------------------------------------------------------------------- #
+_TASK_COLUMNS = ("task_id", "status", "message", "created_by", "error", "created_at", "updated_at")
+
+
+def save_task(task: dict, db_path: Optional[Path] = None) -> dict:
+    """Insert or update a task. Every key that is not a column is kept in the JSON column state."""
+    task["updated_at"] = _now()
+    state = json.dumps({k: v for k, v in task.items() if k not in _TASK_COLUMNS}, ensure_ascii=False, default=str)
+    with connect(db_path) as conn:
+        conn.execute(
+            """INSERT INTO orchestrator_tasks (task_id, status, message, created_by, error, state, created_at, updated_at)
+               VALUES (?,?,?,?,?,?,?,?)
+               ON CONFLICT(task_id) DO UPDATE SET status=excluded.status, message=excluded.message, error=excluded.error,
+                 state=excluded.state, updated_at=excluded.updated_at""",
+            (task["task_id"], task["status"], task["message"], task["created_by"], task.get("error"), state,
+             task["created_at"], task["updated_at"]))
+    return task
+
+
+def _task_row(row) -> dict:
+    data = dict(row)
+    return {**json.loads(data.pop("state")), **data}
+
+
+def get_task(task_id: str, db_path: Optional[Path] = None) -> Optional[dict]:
+    with connect(db_path) as conn:
+        row = conn.execute("SELECT * FROM orchestrator_tasks WHERE task_id=?", (task_id,)).fetchone()
+        return _task_row(row) if row else None
+
+
+def list_tasks(status: Optional[str] = None, limit: int = 50, db_path: Optional[Path] = None) -> list[dict]:
+    """Newest first."""
+    sql, args = "SELECT * FROM orchestrator_tasks", []
+    if status:
+        sql += " WHERE status=?"
+        args.append(status)
+    sql += " ORDER BY created_at DESC, task_id LIMIT ?"
+    args.append(limit)
+    with connect(db_path) as conn:
+        return [_task_row(r) for r in conn.execute(sql, args)]
+
+
+def claim_task(task_id: str, expected_status: str, db_path: Optional[Path] = None) -> bool:
+    """Move a paused task back to running. Atomic: of two clicks (or two servers) only one gets True, so an approved
+    action can never run twice."""
+    with connect(db_path) as conn:
+        return conn.execute("UPDATE orchestrator_tasks SET status='running', updated_at=? WHERE task_id=? AND status=?",
+                            (_now(), task_id, expected_status)).rowcount > 0
+
+
+def fail_stale_tasks(cutoff: str, reason: str, db_path: Optional[Path] = None) -> list[str]:
+    """Tasks still running with no progress since cutoff (their process stopped) are marked failed."""
+    with connect(db_path) as conn:
+        ids = [r["task_id"] for r in conn.execute(
+            "SELECT task_id FROM orchestrator_tasks WHERE status='running' AND updated_at<?", (cutoff,))]
+        for task_id in ids:
+            conn.execute("UPDATE orchestrator_tasks SET status='failed', error=?, updated_at=? "
+                         "WHERE task_id=? AND status='running'", (reason, _now(), task_id))
+    return ids
 
 
 # --------------------------------------------------------------------------- #

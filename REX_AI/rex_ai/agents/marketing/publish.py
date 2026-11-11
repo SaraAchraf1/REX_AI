@@ -8,7 +8,7 @@ Zapier flow) picks up, and e-mails the e-mail variant to consented recipients:
         campaign.json        chosen variants, strategy plan, facts used, sources, approval
         content.csv          one row per variant (UTF-8 with BOM: opens in Excel / Google Sheets)
         <channel>_<n>.txt    copy-paste ready text per variant
-    outputs/campaigns/outbox/*.eml   the e-mail when REX_SMTP_HOST is not set
+    outputs/campaigns/outbox/*.eml   the e-mail when REX_SMTP_HOST is not set (else sent via the MCP tool server)
 """
 from __future__ import annotations
 
@@ -17,12 +17,12 @@ import io
 import json
 import logging
 import re
-import smtplib
 from datetime import datetime, timezone
 from email.message import EmailMessage
 from pathlib import Path
 
 from rex_ai import config
+from rex_ai.core import mailer
 from rex_ai.core.schemas import Campaign, ContentVariant
 
 log = logging.getLogger("rex.marketing.publish")
@@ -64,16 +64,8 @@ def send_email(to: list[str], v: ContentVariant) -> dict:
     msg["Subject"] = v.headline or v.cta
     msg["From"], msg["To"] = config.SMTP_FROM or "rex-ai@academy.local", ", ".join(to)
     msg.set_content(v.body)
-    if config.SMTP_HOST:
-        try:
-            with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT, timeout=20) as s:
-                s.starttls()
-                if config.SMTP_USER:
-                    s.login(config.SMTP_USER, config.SMTP_PASSWORD)
-                s.send_message(msg)
-        except Exception as exc:
-            raise RuntimeError(f"E-mail could not be sent: {exc}") from exc
-        return {"sent": True, "channel": "smtp", "to": to}
+    if mailer.configured():                              # sent through the MCP tool server (MailError if not)
+        return mailer.send(to, msg["Subject"], v.body)
     outbox = config.MARKETING_OUTPUT_DIR / "outbox"
     outbox.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")

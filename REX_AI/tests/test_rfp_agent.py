@@ -420,11 +420,62 @@ def test_qualified_tender_is_emailed(runs, monkeypatch):
     assert rec.status.value == "qualified" and len(_FakeSMTP.sent) == 1
     msg = _FakeSMTP.sent[0]
     assert msg["To"] == "bids@academy.example" and "Qualified" in msg["Subject"]
-    assert rec.title in msg.get_content() and "Strong fit" in msg.get_content()
+    text, html = msg.get_body(("plain",)).get_content(), msg.get_body(("html",)).get_content()
+    assert rec.title in text and "Strong fit" in text                     # plain text for clients without HTML
+    assert "Prepare a bid" in html and "Strong fit" in html and rfp_id in html
     assert any(a["rfp_id"] == rfp_id and a["priority"] == "qualified" for a in db.list_rfp_alerts())
+    stored = db.get_rfp(rfp_id)                                         # the tender itself records the e-mail
+    assert stored["emailed_to"] == ["bids@academy.example"] and stored["emailed_at"]
+    from rex_ai.api.main import app
+    from fastapi.testclient import TestClient
+    shown = TestClient(app).get(f"/rfp/{rfp_id}").json()                  # and the API returns it
+    assert shown["emailed_to"] == ["bids@academy.example"] and shown["emailed_at"]
     RFPResearchAgent.set_status(rfp_id, RFPStatusUpdate(status="rejected", reviewer="Bids lead",
                                                         email="bids@academy.example"))
     assert len(_FakeSMTP.sent) == 1                                       # only "qualified" sends
+
+
+def test_alert_emails_are_html_with_a_text_fallback(monkeypatch):
+    from rex_ai.agents.rfp import notify
+    monkeypatch.setattr(config, "SMTP_HOST", "smtp.example")
+    monkeypatch.setattr(config, "RFP_ALERT_EMAILS", ["bids@academy.example"])
+    monkeypatch.setattr("rex_ai.core.mailer.smtplib.SMTP", _FakeSMTP)
+    monkeypatch.setattr(notify.db, "save_rfp_alert", lambda alert: None)      # made-up tenders, not in the database
+    marked = []
+    monkeypatch.setattr(notify.db, "mark_rfp_emailed", lambda ids, to: marked.append((ids, to)))
+    _FakeSMTP.sent = []
+    base = {"issuing_organization": "Org <b>", "deadline": "2026-10-30", "training_category": "Technical Training",
+            "qualification": "likely", "summary": "Train staff", "matched_course_ids": []}
+    notify.notify([{**base, "rfp_id": "RFP-EG-T1", "country": "EG", "title": "<script>x</script> Tender",
+                    "submission_link": "javascript:alert(1)"},
+                   {**base, "rfp_id": "RFP-SA-T2", "country": "SA", "title": "تدريب القيادات",
+                    "submission_link": "https://portal.example/t2"}])
+    egypt, saudi = (m.get_body(("html",)).get_content() for m in _FakeSMTP.sent)
+    assert "<script>" not in egypt and "&lt;script&gt;" in egypt and "javascript:" not in egypt
+    assert "6 days left" in egypt and "Org &lt;b&gt;" in egypt                     # REX_RFP_TODAY = 2026-10-24
+    assert "تدريب القيادات" in saudi and 'href="https://portal.example/t2"' in saudi and 'dir="auto"' in saudi
+    assert "RFP-SA-T2" not in _FakeSMTP.sent[0].get_body(("plain",)).get_content()
+    assert marked == [(["RFP-EG-T1"], ["bids@academy.example"]), (["RFP-SA-T2"], ["bids@academy.example"])]
+
+
+def test_alert_that_was_not_sent_is_not_marked(monkeypatch):
+    from rex_ai.agents.rfp import notify
+    monkeypatch.setattr(config, "SMTP_HOST", "")                               # no mail server
+    monkeypatch.setattr(config, "RFP_ALERT_EMAILS", ["bids@academy.example"])
+    monkeypatch.setattr(notify.db, "save_rfp_alert", lambda alert: None)
+    marked = []
+    monkeypatch.setattr(notify.db, "mark_rfp_emailed", lambda ids, to: marked.append(ids))
+    notify.notify([{"rfp_id": "RFP-EG-T3", "country": "EG", "title": "T", "issuing_organization": "O",
+                    "training_category": "Technical Training", "qualification": "likely"}])
+    assert marked == []
+
+
+def test_recipients_accumulate_on_the_tender(runs):
+    rfp_id = runs["first"].records[0].rfp_id
+    db.mark_rfp_emailed([rfp_id], ["a@academy.example"])
+    db.mark_rfp_emailed([rfp_id, rfp_id], ["b@academy.example", "a@academy.example"])
+    assert db.get_rfp(rfp_id)["emailed_to"][-2:] == ["a@academy.example", "b@academy.example"]
+    db.mark_rfp_emailed(["RFP-XX-NOPE"], ["a@academy.example"])               # unknown tender: ignored
 
 
 def test_qualified_email_failure_is_reported(runs, monkeypatch):

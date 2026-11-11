@@ -156,17 +156,16 @@ class SentenceTransformerEmbedder(Embedder):
 
 
 class OpenAIEmbedder(Embedder):
+    """OpenAI embeddings through the MCP tool server (tool embed_texts)."""
     def __init__(self, model_name: str):
-        from openai import OpenAI
-        self.client = OpenAI(api_key=config.OPENAI_API_KEY)
         self.model_name = model_name
         self.name = f"openai:{model_name}"
 
     def embed_documents(self, texts):
+        from rex_ai.mcp import client as tools
         out = []
         for i in range(0, len(texts), 256):
-            resp = self.client.embeddings.create(model=self.model_name, input=list(texts[i:i + 256]))
-            out.extend(d.embedding for d in resp.data)
+            out.extend(tools.call("embed_texts", texts=list(texts[i:i + 256]), model=self.model_name)["vectors"])
         arr = np.asarray(out, dtype=np.float32)
         return arr / np.linalg.norm(arr, axis=1, keepdims=True).clip(min=1e-12)
 

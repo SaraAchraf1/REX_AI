@@ -46,6 +46,18 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
 GEMINI_BASE_URL = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/")
 USE_GEMINI = os.getenv("REX_USE_LLM", "1") == "1" and bool(GEMINI_API_KEY)
 
+# ---- MCP tool server (rex_ai/mcp): every external service (LLMs, embeddings, e-mail, webhooks, web) -------
+# URL of a standalone server (python -m rex_ai.mcp.server --http), e.g. http://127.0.0.1:8765/mcp;
+# empty = the tool server runs inside this process
+MCP_URL = os.getenv("REX_MCP_URL", "")
+MCP_TIMEOUT = float(os.getenv("REX_MCP_TIMEOUT", "180"))          # seconds per tool call (LLM answers can be slow)
+# ---- Orchestrator (rex_ai/agents/orchestrator) ---------------------------------
+ORCH_INTERVAL = float(os.getenv("REX_ORCH_INTERVAL", "300"))      # seconds between flow checks in the API; 0 = off
+ORCH_STALE_HOURS = float(os.getenv("REX_ORCH_STALE_HOURS", "48")) # a handoff nobody picked up after this is "stuck"
+ORCH_JOB_TIMEOUT_MIN = float(os.getenv("REX_ORCH_JOB_TIMEOUT_MIN", "60"))   # a job "running" longer = failed
+ORCH_MAX_STEPS = int(os.getenv("REX_ORCH_MAX_STEPS", "15"))        # agent calls one administrator task may make
+# The API remembers shared read answers and keeps them fresh (rex_ai/api/read_cache.py); 0 = always ask the database
+API_CACHE = os.getenv("REX_API_CACHE", "1") == "1"
 # "localhost" makes Windows try IPv6 first; uvicorn listens on IPv4 only, so every call waited ~2 s
 API_URL = os.getenv("REX_API_URL", "http://127.0.0.1:8000").replace("//localhost", "//127.0.0.1")
 

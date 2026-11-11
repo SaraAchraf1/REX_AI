@@ -15,7 +15,7 @@ import pandas as pd
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from frontend.ui import api, no_fog, require  # noqa: E402
+from frontend.ui import api, no_fog, prefetch, require  # noqa: E402
 from rex_ai import config  # noqa: E402
 from rex_ai.core.schemas import RFPCategory, RFPStatus  # noqa: E402
 
@@ -62,11 +62,18 @@ def run_research(payload: dict) -> dict:
     return local_agent().run(RFPRunRequest(**payload)).model_dump(mode="json")
 
 
+@st.cache_data(ttl=60, show_spinner=False)
 def list_rfps(params: dict) -> list[dict]:
     params = {k: v for k, v in params.items() if v not in (None, "", False)}
     if API:
         return api().get(f"{config.API_URL}/rfp", params=params, timeout=30).json()
     return [r.model_dump(mode="json") for r in local_agent().search(**params)]
+
+
+def changed() -> None:
+    """After a run or a decision: show the new state now, not after the cache expires."""
+    list_rfps.clear()
+    alerts.clear()
 
 
 def set_status(rfp_id: str, status: str, reviewer: str, comment: str, email: str = "") -> None:
@@ -97,6 +104,7 @@ def ask(question: str, country: str | None) -> dict:
     return local_agent().ask(RFPAskRequest(**payload)).model_dump(mode="json")
 
 
+@st.cache_data(ttl=60, show_spinner=False)
 def alerts() -> list[dict]:
     if API:
         return api().get(f"{config.API_URL}/rfp/alerts", timeout=10).json()
@@ -148,6 +156,7 @@ with st.sidebar:
         with st.spinner("Collecting, filtering and assessing tenders..."):
             try:
                 st.session_state.last_run = run_research(payload)
+                changed()
             except (httpx.HTTPError, ValueError) as exc:
                 st.error(f"Run failed: {exc}")
 
@@ -164,6 +173,8 @@ with st.sidebar:
                     st.error(f"{f.name}: {exc}")
 
 # ------------------------------------------------------------------ header + last run
+DEFAULT_FILTERS = {"country": "", "status": "", "qualification": "", "q": "", "open_only": True}
+prefetch((list_rfps, DEFAULT_FILTERS), (alerts,))     # both at once; the tabs below read them from the cache
 st.title("📑 Educational RFP & Tender Research")
 st.info("Prototype running on SAMPLE tenders (data/rfp/). Organisations, links and dates are fictional until real "
         "portal exports or tender documents are added.", icon="ℹ️")
@@ -252,6 +263,7 @@ with tab_pipeline:
                             with st.spinner("Saving" + (" and e-mailing..." if new_status == "qualified"
                                                         and email.strip() else "...")):
                                 set_status(chosen, new_status, reviewer, comment, email.strip())
+                            changed()
                             sent = new_status == "qualified" and email.strip()
                             st.session_state.rfp_notice = f"{chosen} -> {new_status}" +                                 (f" · e-mailed to {email.strip()}" if sent else "")
                             st.rerun()

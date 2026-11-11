@@ -11,6 +11,7 @@ API is not running, directly on the database.
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Optional
 
 import httpx
@@ -57,11 +58,96 @@ def api() -> _Client:
     return _Client()
 
 
+def prefetch(*calls) -> None:
+    """Run a page's cached loaders at the same time: prefetch((courses,), (list_campaigns, DEFAULT_FILTERS)).
+    Each one waits on the network (API -> remote database), so the page waits for the slowest instead of the sum;
+    the page's own calls then come from the cache. A loader that fails is left to the page, which shows the error."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
+    ctx = get_script_run_ctx()
+
+    def run(call):
+        add_script_run_ctx(threading.current_thread(), ctx)      # the login token lives in this session
+        try:
+            call[0](*call[1:])
+        except Exception:
+            pass
+    with ThreadPoolExecutor(max_workers=len(calls)) as pool:
+        list(pool.map(run, calls))
+
+
 def no_fog() -> None:
     """While a page reruns, Streamlit dims ("fogs") everything already on screen. Keep it fully visible: actions
-    that take time show their own spinner instead."""
+    that take time show their own spinner instead. Also applies the academy look (brand()) - every page calls this."""
     st.markdown("<style>[data-stale='true'], .stale-element {opacity: 1 !important; transition: none !important;}"
                 "</style>", unsafe_allow_html=True)
+    brand()
+
+
+# ------------------------------------------------------------------ Andalusia Academy look
+# Colours and fonts are in .streamlit/config.toml; images in frontend/static/ (served at app/static/).
+LOGO = str(Path(__file__).resolve().parent / "static" / "logo.png")
+_BRAND_CSS = """<style>
+/* the campus, softened, on the left; it fades into ivory so the pages stay easy to read */
+/* the photo is 0.6 x as wide as it is tall and fills the window's height, so the fade is measured in vh: it is
+   fully ivory exactly where the photo ends, whatever the window size */
+.stApp {
+  background:
+    linear-gradient(90deg, rgba(251,247,241,0.00) 0vh, rgba(251,247,241,0.08) 24vh, rgba(251,247,241,0.50) 44vh,
+                    #FBF7F1 60vh),
+    url("app/static/building.jpg") left top / auto 100vh no-repeat fixed,
+    #FBF7F1;
+}
+[data-testid="stHeader"] { background: transparent; }
+/* blocks that only carry these styles take no room on the page */
+[data-testid="stElementContainer"]:has(style) { display: none; }
+/* see-through panels: the photo is already blurred in the file, so no live blur (cheaper to draw and scroll) */
+[data-testid="stSidebar"] {
+  background: rgba(243,232,216,0.62) !important;
+  border-right: 1px solid rgba(184,112,90,0.25);
+}
+[data-testid="stSidebarHeader"] { height: auto; padding-top: 1.1rem; padding-bottom: 0.6rem; }
+[data-testid="stMainBlockContainer"] {
+  background: rgba(251,247,241,0.72);
+  border: 1px solid rgba(227,211,188,0.85); border-radius: 18px;
+  box-shadow: 0 10px 34px rgba(58,42,34,0.10);
+  margin-top: 4.2rem; margin-bottom: 2rem; padding-top: 2rem !important;
+}
+/* headings in the logo's copper; a thin gold rule under the page title */
+h1, h2, h3 { color: #8E4E38 !important; letter-spacing: 0.01em; }
+[data-testid="stMainBlockContainer"] h1 { padding-bottom: 0.45rem; border-bottom: 2px solid rgba(201,160,99,0.55); }
+[data-testid="stSidebarLogo"] { height: 3.6rem !important; max-width: 100%; }
+[data-testid="stHeaderLogo"] { height: 2.6rem !important; }
+/* the chat page's message bar: no solid strip across the photo */
+[data-testid="stBottom"], [data-testid="stBottom"] > div, [data-testid="stBottomBlockContainer"] { background: transparent !important; }
+[data-testid="stSidebarNav"] a[aria-current="page"] { background: rgba(184,112,90,0.16); }
+/* working: a thin copper bar sweeps across the top and a small ring turns in the corner while the page runs.
+   Shown after 0.25 s, so instant clicks do not flash it. */
+[data-testid="stApp"][data-test-script-state="running"]::before {
+  content: ""; position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 1000002; pointer-events: none;
+  background: linear-gradient(90deg, transparent, #B8705A, #C9A063, transparent) no-repeat;
+  background-size: 40% 100%; opacity: 0;
+  animation: rex-sweep 1.1s ease-in-out infinite, rex-appear 0.01s linear 0.25s forwards;
+}
+[data-testid="stApp"][data-test-script-state="running"]::after {
+  content: ""; position: fixed; top: 16px; right: 20px; width: 16px; height: 16px; z-index: 1000002;
+  pointer-events: none; border-radius: 50%; border: 2.5px solid rgba(184,112,90,0.22); border-top-color: #9A5440;
+  opacity: 0; animation: rex-spin 0.75s linear infinite, rex-appear 0.01s linear 0.25s forwards;
+}
+@keyframes rex-sweep { from { background-position: -60% 0; } to { background-position: 160% 0; } }
+@keyframes rex-spin { to { transform: rotate(360deg); } }
+@keyframes rex-appear { to { opacity: 1; } }
+.rex-hero { text-align: center; margin: 0.4rem 0 1.2rem; }
+.rex-hero img { width: 150px; }
+.rex-hero p { color: #6B4A3A; margin: 0.3rem 0 0; letter-spacing: 0.06em; }
+</style>"""
+
+
+def brand() -> None:
+    """The academy look on every page: the background photo, frosted panels and the logo."""
+    st.markdown(_BRAND_CSS, unsafe_allow_html=True)
+    st.logo(LOGO, size="large", icon_image=LOGO)
 
 
 # ------------------------------------------------------------------ accounts
@@ -195,8 +281,8 @@ def require(role: str = "user") -> dict:
 
 def login_page() -> None:
     """Log in or create an account (user = REX Course Assistant; administrator = every agent)."""
-    st.markdown("<h1 style='text-align:center'>🎓 REX AI</h1><p style='text-align:center'>Andalusia Academy · "
-                "Smart Academy Multi-Agent System</p>", unsafe_allow_html=True)
+    st.markdown("<div class='rex-hero'><img src='app/static/logo.png' alt='Andalusia Academy'>"
+                "<p>REX AI · Smart Academy Multi-Agent System</p></div>", unsafe_allow_html=True)
     _, mid, _ = st.columns([1, 2, 1])
     with mid:
         tab_in, tab_up = st.tabs(["Log in", "Sign up"])

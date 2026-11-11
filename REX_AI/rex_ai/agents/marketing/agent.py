@@ -364,19 +364,20 @@ class MarketingAgent:
         """What other agents handed over: approved documents (HandoffEvent document -> marketing) and approved
         curricula of catalogue courses (brief workflow: Curriculum Approved -> Marketing Agent Generates Campaign),
         each with the campaigns already made for it."""
-        out, seen = [], set()
+        out, events = [], {}                          # a fixed number of queries, however many handoffs
         for ev in db.list_handoffs_to(AGENT):
-            if ev["payload_type"] != "document" or ev["payload_id"] in seen:
-                continue
-            seen.add(ev["payload_id"])
-            doc = db.get_document(ev["payload_id"])
+            if ev["payload_type"] == "document":
+                events.setdefault(ev["payload_id"], ev)
+        docs = db.get_documents(events)
+        made = db.campaign_sources()
+        for did, ev in events.items():
+            doc = docs.get(did)
             if not doc or not doc.get("course_id"):
                 continue
             out.append({"kind": "document", "id": doc["document_id"], "course_id": doc["course_id"],
                         "curriculum_id": doc.get("curriculum_id"), "title": doc["title"], "status": doc["status"],
                         "handed_over_at": ev["created_at"],
-                        "campaigns": len([r for r in db.list_campaigns(course_id=doc["course_id"])
-                                          if r.get("document_id") == doc["document_id"]])})
+                        "campaigns": sum(1 for c in made if c["document_id"] == did)})
         for row in db.list_curricula(status="approved"):
             course_id = (row.get("course_id") or "").upper()
             if not course_id or course_id not in self.kb.courses:
@@ -384,5 +385,5 @@ class MarketingAgent:
             out.append({"kind": "curriculum", "id": row["curriculum_id"], "course_id": course_id,
                         "curriculum_id": row["curriculum_id"], "title": row["course_title"],
                         "status": row["status"], "version": row["version"], "handed_over_at": row["updated_at"],
-                        "campaigns": len(db.list_campaigns(curriculum_id=row["curriculum_id"]))})
+                        "campaigns": sum(1 for c in made if c["curriculum_id"] == row["curriculum_id"])})
         return out

@@ -1,0 +1,36 @@
+# Andalusia Academy look for the REX AI web app (read when you run: streamlit run frontend/streamlit_app.py
+# from this folder). Colours come from the academy logo (copper #B8705A) and the campus photo (ivory, sand, gold).
+
+[server]
+# serves frontend/static/ (logo, background photo) at app/static/...
+enableStaticServing = true
+
+[theme]
+base = "light"
+primaryColor = "#9A5440"              # deep copper: buttons, tabs, sliders (white text stays readable on it)
+backgroundColor = "#FBF7F1"           # warm ivory
+secondaryBackgroundColor = "#F3E8D8"  # sand: inputs, code, expanders
+textColor = "#3A2A22"                 # dark warm brown
+linkColor = "#9A5440"
+borderColor = "#E3D3BC"
+showWidgetBorder = true
+baseRadius = "10px"
+font = "sans-serif"
+headingFont = "serif"                 # echoes the logo's lettering
+headingFontWeights = [600, 600, 600, 600, 600, 600]
+headingFontSizes = ["2.3rem", "1.7rem", "1.35rem", "1.15rem", "1rem", "0.9rem"]
+# info boxes in the photo's warm gold and success in the olive of its palms, instead of cold blue / bright green
+blueColor = "#B07A2E"
+blueBackgroundColor = "#F6EBD6"
+blueTextColor = "#6E4A16"
+greenColor = "#5E7A45"
+greenBackgroundColor = "#E8EEDC"
+greenTextColor = "#3F5530"
+
+[client]
+toolbarMode = "minimal"               # no developer "Deploy" button in the top bar
+
+[theme.sidebar]
+backgroundColor = "#F3E8D8"
+secondaryBackgroundColor = "#FBF7F1"
+borderColor = "#E3D3BC"

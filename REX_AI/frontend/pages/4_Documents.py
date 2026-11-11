@@ -16,7 +16,7 @@ import pandas as pd
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from frontend.ui import api, no_fog, require  # noqa: E402
+from frontend.ui import api, no_fog, prefetch, require  # noqa: E402
 from rex_ai import config  # noqa: E402
 
 st.set_page_config(page_title="REX - Documents", page_icon="📄", layout="wide")
@@ -184,6 +184,8 @@ def create(types: list[str], base: dict) -> list[dict]:
 
 
 # ------------------------------------------------------------------ sidebar: discovery questions (brief §10)
+prefetch((doc_types,), (courses,), (curricula,), (handoffs,),
+         (list_documents, (("doc_type", ""), ("status", ""), ("language", ""), ("course_id", ""), ("q", ""))))
 TYPES = {t["doc_type"]: t for t in doc_types()}
 catalogue = courses()
 

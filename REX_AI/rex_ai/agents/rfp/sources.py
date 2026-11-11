@@ -204,13 +204,13 @@ class WebPageSource(Source):
     to read 'Deadline: ...' style fields. Portal layouts change, so nothing here depends on CSS classes."""
 
     def __init__(self, entry: dict, max_items: int = 30, follow_details: int = 5, session=None):
-        import requests
+        from rex_ai.mcp.client import HttpSession        # page fetches go through the MCP tool server
         self.entry = entry
         self.source_id = entry["source_id"]
         self.url = entry.get("url")
         self.max_items = max_items
         self.follow_details = follow_details
-        self.http = session or requests.Session()
+        self.http = session or HttpSession()
         self.http.headers.update({"User-Agent": USER_AGENT})
         country = entry.get("country")
         self.country = country if isinstance(country, str) and country in ("EG", "SA") else None

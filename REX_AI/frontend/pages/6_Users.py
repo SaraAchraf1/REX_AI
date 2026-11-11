@@ -21,6 +21,7 @@ no_fog()
 ME = require("admin")
 
 
+@st.cache_data(ttl=60, show_spinner=False)
 def users() -> list[dict]:
     if api_up():
         r = api().get(f"{config.API_URL}/auth/users", timeout=10)
@@ -62,6 +63,7 @@ with st.form("role"):
     if st.form_submit_button("Save", type="primary"):
         try:
             u = set_role(who, role)
+            users.clear()
             st.session_state.users_notice = f"{u['name']} is now {'an administrator' if u['role'] == 'admin' else 'a user'}."
             if who == ME["user_id"] and role != "admin":
                 st.session_state.auth_user = {**ME, "role": role}

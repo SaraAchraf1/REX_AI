@@ -16,7 +16,7 @@ import pandas as pd
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from frontend.ui import api, no_fog, require  # noqa: E402
+from frontend.ui import api, no_fog, prefetch, require  # noqa: E402
 from rex_ai import config  # noqa: E402
 
 st.set_page_config(page_title="REX - Marketing", page_icon="📣", layout="wide")
@@ -178,6 +178,8 @@ def create(payload: dict) -> None:
 
 
 # ------------------------------------------------------------------ sidebar: discovery questions (brief §10)
+prefetch((channels,), (courses,), (handoffs,),
+         (list_campaigns, (("course_id", ""), ("status", ""), ("language", ""), ("q", ""))))
 CHANNELS = channels()
 catalogue = courses()
 
